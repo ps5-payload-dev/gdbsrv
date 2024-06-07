@@ -1,0 +1,30 @@
+#   Copyright (C) 2024 John Törnblom
+#
+# This file is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING. If not see
+# <http://www.gnu.org/licenses/>.
+
+BIN   := gdbsrv.pc
+SRCS  := main.c gdb_resp.c gdb_pkt.c gdb_sig.c pt_linux.c hashtab.c
+
+CC := clang
+CFLAGS := -Wall -DGDB_PKT_TRACE
+
+all: $(BIN)
+
+clean:
+	rm -rf $(BIN)
+
+$(BIN): $(SRCS)
+	$(CC) $(CFLAGS) -o $@ $^
+
