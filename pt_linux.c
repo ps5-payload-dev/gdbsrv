@@ -139,7 +139,7 @@ pt_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   r.r13 = gprmap[GDB_GPR_R13];
   r.r14 = gprmap[GDB_GPR_R14];
   r.r15 = gprmap[GDB_GPR_R15];
-  r.rip = gprmap[GDB_GPR_RIP] & 0xffffffffffffffffl;
+  r.rip = gprmap[GDB_GPR_RIP];
   r.eflags = gprmap[GDB_GPR_EFLAGS];
   r.cs = gprmap[GDB_GPR_CS];
   r.ss = gprmap[GDB_GPR_SS];
@@ -178,7 +178,7 @@ pt_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val) {
     return -1;
   }
 
-  *val = gprmap[reg] & 0xffffffffffffffffl;
+  *val = gprmap[reg];
 
   return 0;
 }

@@ -23,7 +23,6 @@ along with this program; see the file COPYING. If not, see
 
 #include <sys/wait.h>
 
-#include "hashtab.h"
 #include "pt.h"
 #include "gdb_pkt.h"
 #include "gdb_resp.h"
@@ -40,7 +39,6 @@ typedef struct gdb_session {
   pid_t pid;
   int fd;
   int sig;
-  hashtab_t* mp;
 } gdb_session_t;
 
 
@@ -59,28 +57,26 @@ static char target_xml[] = "<?xml version=\"1.0\"?>\n" \
  * Wait for a signal and report it to the client.
  **/
 static int
-gdb_response_waitpid(gdb_session_t* sess, const char* data, size_t size) {
+gdb_waitpid(gdb_session_t* sess, char* data, size_t size) {
   int status;
 
-  while(1) {
-    if(waitpid(sess->pid, &status, WUNTRACED) < 0) {
-      return gdb_pkt_perror(sess->fd, "waitpid");
-
-    } else if(WIFEXITED(status)) {
-      return gdb_pkt_printf(sess->fd, "W%02X", WEXITSTATUS(status));
-
-    } else if(WIFSIGNALED(status)) {
-      sess->sig = WTERMSIG(status);
-      return gdb_pkt_printf(sess->fd, "X%02X", gdb_sig_fromposix(sess->sig));
-
-    } else if(WIFSTOPPED(status)) {
-      sess->sig = WSTOPSIG(status);
-      return gdb_pkt_printf(sess->fd, "S%02X", gdb_sig_fromposix(sess->sig));
-
-    } else {
-      return -1;
-    }
+  if(waitpid(sess->pid, &status, WUNTRACED) < 0) {
+    return -1;
   }
+
+  if(WIFEXITED(status)) {
+    snprintf(data, size, "W%02x", WEXITSTATUS(status));
+
+  } else if(WIFSIGNALED(status)) {
+    sess->sig = WTERMSIG(status);
+    snprintf(data, size, "X%02x", gdb_sig_fromposix(sess->sig));
+
+  } else if(WIFSTOPPED(status)) {
+    sess->sig = WSTOPSIG(status);
+    snprintf(data, size, "S%02x", gdb_sig_fromposix(sess->sig));
+  }
+
+  return 0;
 }
 
 
@@ -98,6 +94,55 @@ gdb_response_waitpid(gdb_session_t* sess, const char* data, size_t size) {
 static int
 gdb_response_getsig(gdb_session_t* sess, const char* data, size_t size) {
   return gdb_pkt_printf(sess->fd, "S%02X", gdb_sig_fromposix(sess->sig));
+}
+
+
+/**
+ * Input pattern: 'c [addr]'
+ *
+ * Continue at addr, which is the address to resume. If addr is omitted, resume
+ * at current address.
+ *
+ *  This packet is deprecated for multi-threading support. See vCont packet.
+ *
+ * Reply:
+ *   See Stop Reply Packets, for the reply specifications.
+ *
+ * -----------------------------------------------------------------------------
+ *
+ * Input pattern: 'C sig[;addr]'
+ *
+ * Continue with signal sig (hex signal number). If ‘;addr’ is omitted, resume
+ * at same address.
+ *
+ * This packet is deprecated for multi-threading support. See vCont packet.
+ *
+ * Reply:
+ *   See Stop Reply Packets, for the reply specifications.
+ **/
+static int
+gdb_response_continue(gdb_session_t* sess, const char* data, size_t size) {
+  intptr_t addr = 0;
+  char buf[32];
+  int sig = 0;
+
+  if(sscanf(data, "S%x;%lx", &sig, &addr) != 2) {
+    if(sscanf(data, "S%x", &sig) != 1) {
+      sscanf(data, "s%lx", &addr);
+    }
+  }
+
+  sig = gdb_sig_toposix(sig);
+
+  if(pt_continue(sess->pid, addr, sig)) {
+    return gdb_pkt_perror(sess->fd, "pt_continue");
+  }
+
+  if(gdb_waitpid(sess, buf, sizeof(buf))) {
+    return gdb_pkt_perror(sess->fd, "gdb_waitpid");
+  }
+
+  return gdb_pkt_puts(sess->fd, buf);
 }
 
 
@@ -489,8 +534,6 @@ gdb_response_supported(gdb_session_t* sess, const char* data, size_t size) {
 
   sprintf(s, "PacketSize=%d", GDB_PKT_MAX_SIZE);
   strcat(s, ";qXfer:features:read+");
-  strcat(s, ";vContSupported+");
-  strcat(s, ";swbreak+");
 
   return gdb_pkt_puts(sess->fd, s);
 }
@@ -517,168 +560,50 @@ gdb_response_transfer(gdb_session_t* sess, const char* data, size_t size) {
 
 
 /**
- * Input pattern: 'vCont[;action[:thread-id]]...'
+ * Input pattern: 's [addr]'
  *
- * Resume the inferior, specifying different actions for each thread.
+ * Single step, resuming at addr. If addr is omitted, resume at same address.
  *
- * For each inferior thread, the leftmost action with a matching thread-id is
- * applied. Threads that don’t match any action remain in their current state.
- * Thread IDs are specified using the syntax described in thread-id syntax. If
- * multiprocess extensions (see multiprocess extensions) are supported, actions
- * can be specified to match all threads in a process by using the ‘ppid.-1’
- * form of the thread-id. An action with no thread-id matches all threads.
- * Specifying no actions is an error.
- *
- * Currently supported actions are:
- *  'c' - Continue.
- *  'C sig' - Continue with signal sig. The signal sig should be two hex digits.
- *  's' -  Step.
- *  'S sig'  Step with signal sig. The signal sig should be two hex digits.
- *  'r start,end - Step once, and then keep stepping as long as the thread stops
- *                 at addresses between start (inclusive) and end (exclusive).
- *		   The remote stub reports a stop reply when either the thread
- *		   goes out of the range or is stopped due to an unrelated
- *		   reason, such as hitting a breakpoint. See range stepping.
- *
- *		   If the range is empty (start == end), then the action becomes
- *		   equivalent to the ‘s’ action. In other words, single-step
- *		   once, and report the stop (even if the stepped instruction
- *		   jumps to start).
- *
- *		   (A stop reply may be sent at any point even if the PC is
- *		   still within the stepping range; for example, it is valid
- *		   to implement this packet in a degenerate way as a single
- *		   instruction step operation.)
- *
- * Input pattern: 'vCont?'
- *
- * Request a list of actions supported by the 'vCont' packet.
+ * This packet is deprecated for multi-threading support. See vCont packet.
  *
  * Reply:
- *   'vCont[;action...]' - The 'vCont' packet is supported. Each action is a
- *                         supported command in the ‘vCont’ packet.
+ *   See Stop Reply Packets, for the reply specifications.
+ *
+ * -----------------------------------------------------------------------------
+ *
+ * Input pattern: 'S sig[;addr]'
+ *
+ * Step with signal. This is analogous to the 'C' packet, but requests a
+ * single-step, rather than a normal resumption of execution.
+ *
+ * This packet is deprecated for multi-threading support. See vCont packet.
+ *
+ * Reply:
+ *   See Stop Reply Packets, for the reply specifications.
  **/
 static int
-gdb_response_continue(gdb_session_t* sess, const char* data, size_t size) {
+gdb_response_step(gdb_session_t* sess, const char* data, size_t size) {
+  intptr_t addr = 0;
+  char buf[32];
   int sig = 0;
-  char action;
 
-  if(!strcmp(data, "vCont?")) {
-    return gdb_pkt_puts(sess->fd, "vCont;c;C;s;S");
-  }
-
-  if(sscanf(data, "vCont;%c;%x", &action, &sig) != 2) {
-    if(sscanf(data, "vCont;%c", &action) != 1) {
-      return -1;
+  if(sscanf(data, "S%x;%lx", &sig, &addr) != 2) {
+    if(sscanf(data, "S%x", &sig) != 1) {
+      sscanf(data, "s%lx", &addr);
     }
   }
 
   sig = gdb_sig_toposix(sig);
 
-  switch(action) {
-  case 'c':
-  case 'C':
-    if(pt_continue(sess->pid, 1, sig)) {
-      return gdb_pkt_perror(sess->fd, "pt_continue");
-    }
-    return gdb_response_waitpid(sess, data, size);
-
-  case 's':
-  case 'S':
-    if(pt_step(sess->pid, 1, sig)) {
-      return gdb_pkt_perror(sess->fd, "pt_step");
-    }
-    return gdb_response_waitpid(sess, data, size);
-
-  default:
-    return -1;
-  }
-}
-
-
-/**
- * Input pattern: 'z type,addr,kind'
- *
- * Clear a type breakpoint or watchpoint starting at address address of a
- * given kind.
- *
- * Each breakpoint and watchpoint packet type is documented separately.
- *
- * Implementation notes: A remote target shall return an empty string for an
- * unrecognized breakpoint or watchpoint packet type. A remote target shall
- * support either both or neither of a given Z-type and z-type packet pair.
- * To avoid potential problems with duplicate packets, the operations should be
- * implemented in an idempotent way.
- **/
-static int
-gdb_response_clrmp(gdb_session_t* sess, const char* data, size_t size) {
-  intptr_t addr;
-  uint8_t instr;
-  int type;
-  int kind;
-
-  if(sscanf(data, "z%1d,%lx,%1d", &type, &addr, &kind) != 3) {
-    return -1;
+  if(pt_step(sess->pid, addr, sig)) {
+    return gdb_pkt_perror(sess->fd, "pt_step");
   }
 
-  // only software breakpoints for now
-  if(type != 0) {
-    return gdb_pkt_puts(sess->fd, "");
+  if(gdb_waitpid(sess, buf, sizeof(buf))) {
+    return gdb_pkt_perror(sess->fd, "gdb_waitpid");
   }
 
-  if(!hashtab_member_exists(sess->mp, addr)) {
-    return gdb_pkt_puts(sess->fd, "E.Breakpoint does not exist");
-  }
-
-  instr = hashtab_member_value(sess->mp, addr);
-  if(pt_copyin(sess->pid, &instr, addr, sizeof(instr))) {
-    return gdb_pkt_perror(sess->fd, "pt_copyin");
-  }
-
-  hashtab_member_del(sess->mp, addr);
-  return gdb_pkt_puts(sess->fd, "OK");
-}
-
-
-/**
- * Input pattern: 'Z type,addr,kind'
- *
- * Insert a type breakpoint or watchpoint starting at address address of a
- * given kind.
- **/
-static int
-gdb_response_setmp(gdb_session_t* sess, const char* data, size_t size) {
-  intptr_t addr;
-  uint8_t instr;
-  int type;
-  int kind;
-
-  if(sscanf(data, "Z%1d,%lx,%1d", &type, &addr, &kind) != 3) {
-    return -1;
-  }
-
-  // only software breakpoints for now
-  if(type != 0) {
-    return gdb_pkt_puts(sess->fd, "");
-  }
-
-  if(hashtab_member_exists(sess->mp, addr)) {
-    return gdb_pkt_puts(sess->fd, "OK");
-  }
-
-  if(pt_copyout(sess->pid, addr, &instr, sizeof(instr))) {
-    return gdb_pkt_perror(sess->fd, "pt_copyout");
-  }
-
-  hashtab_member_add(sess->mp, addr, instr);
-  instr = 0xcc;
-
-  if(pt_copyin(sess->pid, &instr, addr, sizeof(instr))) {
-    hashtab_member_del(sess->mp, addr);
-    return gdb_pkt_perror(sess->fd, "pt_copyin");
-  }
-
-  return gdb_pkt_puts(sess->fd, "OK");
+  return gdb_pkt_puts(sess->fd, buf);
 }
 
 
@@ -692,6 +617,10 @@ gdb_response(void* ctx, const char* data, size_t size) {
   switch(data[0]) {
   case '?':
     return gdb_response_getsig(sess, data, size);
+
+  case 'c':
+  case 'C':
+    return gdb_response_continue(sess, data, size);
 
   case 'D':
     return gdb_response_detach(sess, data, size);
@@ -729,17 +658,9 @@ gdb_response(void* ctx, const char* data, size_t size) {
     }
     return gdb_pkt_puts(sess->fd, "");
 
-  case 'v':
-    if(STR_START_WITH(data, "vCont")) {
-      return gdb_response_continue(sess, data, size);
-    }
-    return gdb_pkt_puts(sess->fd, "");
-
-  case 'Z':
-    return gdb_response_setmp(sess, data, size);
-
-  case 'z':
-    return gdb_response_clrmp(sess, data, size);
+  case 's':
+  case 'S':
+    return gdb_response_step(sess, data, size);
 
   default:
     return gdb_pkt_puts(sess->fd, "");
@@ -754,8 +675,7 @@ gdb_response_session(int fd, pid_t pid) {
   gdb_session_t sess = {
     .fd = fd,
     .pid = pid,
-    .sig = 0,
-    .mp = hashtab_new()
+    .sig = 0
   };
 
   while(1) {
@@ -765,6 +685,4 @@ gdb_response_session(int fd, pid_t pid) {
   }
 
   kill(pid, SIGSTOP);
-
-  hashtab_del(sess.mp);
 }

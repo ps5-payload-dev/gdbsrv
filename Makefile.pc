@@ -15,7 +15,7 @@
 # <http://www.gnu.org/licenses/>.
 
 BIN   := gdbsrv.pc
-SRCS  := main.c gdb_resp.c gdb_pkt.c gdb_sig.c pt_linux.c hashtab.c
+SRCS  := main.c gdb_resp.c gdb_pkt.c gdb_sig.c pt_linux.c
 
 CC := clang
 CFLAGS := -Wall -DGDB_PKT_TRACE
