@@ -52,19 +52,19 @@ enum gdb_gpr {
 #define GDB_GPR_MAX (GDB_GPR_GS+1)
 
 
-int pt_traceme(void);
+int gdb_traceme(void);
 
-int pt_attach(pid_t pid);
-int pt_detach(pid_t pid);
+int gdb_attach(pid_t pid);
+int gdb_detach(pid_t pid);
 
-int pt_step(pid_t pid, intptr_t addr, int sig);
-int pt_continue(pid_t pid, intptr_t addr, int sig);
+int gdb_step(pid_t pid, intptr_t addr, int sig);
+int gdb_continue(pid_t pid, intptr_t addr, int sig);
 
-int pt_getregs(pid_t pid, uint64_t regmap[GDB_GPR_MAX]);
-int pt_setregs(pid_t pid, const uint64_t regmap[GDB_GPR_MAX]);
+int gdb_getregs(pid_t pid, uint64_t regmap[GDB_GPR_MAX]);
+int gdb_setregs(pid_t pid, const uint64_t regmap[GDB_GPR_MAX]);
 
-int pt_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val);
-int pt_setreg(pid_t pid, enum gdb_gpr reg, uint64_t val);
+int gdb_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val);
+int gdb_setreg(pid_t pid, enum gdb_gpr reg, uint64_t val);
 
-int pt_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len);
-int pt_copyout(pid_t pid, intptr_t addr, void* buf, size_t len);
+int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len);
+int gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len);

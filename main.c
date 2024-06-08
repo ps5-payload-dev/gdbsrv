@@ -25,7 +25,7 @@ along with this program; see the file COPYING. If not, see
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
-#include "pt.h"
+#include "gdb_arch.h"
 #include "gdb_resp.h"
 
 
@@ -115,8 +115,8 @@ int main(int argc, char** argv, char** envp) {
   pid_t pid = fork();
 
   if(!pid) {
-    if(pt_traceme()) {
-      perror("pt_traceme");
+    if(gdb_traceme()) {
+      perror("gdb_traceme");
       _exit(-1);
     }
 

@@ -24,17 +24,17 @@ along with this program; see the file COPYING. If not, see
 #include <string.h>
 #include <sys/user.h>
 
-#include "pt.h"
+#include "gdb_arch.h"
 
 
 int
-pt_traceme(void) {
+gdb_traceme(void) {
   return ptrace(PTRACE_TRACEME, 0, 0, 0);
 }
 
 
 int
-pt_attach(pid_t pid) {
+gdb_attach(pid_t pid) {
   if(ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
     return -1;
   }
@@ -48,7 +48,7 @@ pt_attach(pid_t pid) {
 
 
 int
-pt_detach(pid_t pid) {
+gdb_detach(pid_t pid) {
   if(ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
     return -1;
   }
@@ -58,7 +58,7 @@ pt_detach(pid_t pid) {
 
 
 int
-pt_step(int pid, intptr_t addr, int sig) {
+gdb_step(int pid, intptr_t addr, int sig) {
   if(ptrace(PTRACE_SINGLESTEP, pid, addr, (void*)(long)sig) == -1) {
     return -1;
   }
@@ -68,7 +68,7 @@ pt_step(int pid, intptr_t addr, int sig) {
 
 
 int
-pt_continue(pid_t pid, intptr_t addr, int sig) {
+gdb_continue(pid_t pid, intptr_t addr, int sig) {
   if(ptrace(PTRACE_CONT, pid, addr, (void*)(long)sig) == -1) {
     return -1;
   }
@@ -78,7 +78,7 @@ pt_continue(pid_t pid, intptr_t addr, int sig) {
 
 
 int
-pt_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
+gdb_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
   struct user_regs_struct r;
 
   if(ptrace(PTRACE_GETREGS, pid, NULL, &r) == -1) {
@@ -116,7 +116,7 @@ pt_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
 
 
 int
-pt_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
+gdb_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   struct user_regs_struct r;
 
   if(ptrace(PTRACE_GETREGS, pid, NULL, &r) == -1) {
@@ -157,24 +157,24 @@ pt_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
 
 
 int
-pt_setreg(pid_t pid, enum gdb_gpr reg, uint64_t val) {
+gdb_setreg(pid_t pid, enum gdb_gpr reg, uint64_t val) {
   uint64_t gprmap[GDB_GPR_MAX];
 
-  if(pt_getregs(pid, gprmap)) {
+  if(gdb_getregs(pid, gprmap)) {
     return -1;
   }
 
   gprmap[reg] = val;
 
-  return pt_setregs(pid, gprmap);
+  return gdb_setregs(pid, gprmap);
 }
 
 
 int
-pt_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val) {
+gdb_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val) {
   uint64_t gprmap[GDB_GPR_MAX];
 
-  if(pt_getregs(pid, gprmap)) {
+  if(gdb_getregs(pid, gprmap)) {
     return -1;
   }
 
@@ -185,7 +185,7 @@ pt_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val) {
 
 
 static int
-pt_getlong(pid_t pid, intptr_t addr, long* val) {
+gdb_getlong(pid_t pid, intptr_t addr, long* val) {
   errno = 0;
   *val = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
   if(errno != 0) {
@@ -196,17 +196,17 @@ pt_getlong(pid_t pid, intptr_t addr, long* val) {
 
 
 static int
-pt_setlong(pid_t pid, intptr_t addr, long val) {
+gdb_setlong(pid_t pid, intptr_t addr, long val) {
   return ptrace(PTRACE_POKEDATA, pid, addr, val);
 }
 
 
 int
-pt_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
+gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
   long val;
 
   for(off_t i=0; i<len; i+=8) {
-    if(pt_getlong(pid, addr+i, &val)) {
+    if(gdb_getlong(pid, addr+i, &val)) {
       return -1;
     }
     if(len-i < 8) {
@@ -220,11 +220,11 @@ pt_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
 }
 
 
-int pt_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
+int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
   long val;
 
   for(off_t i=0; i<len; i+=8) {
-    if(pt_getlong(pid, addr+i, &val)) {
+    if(gdb_getlong(pid, addr+i, &val)) {
       return -1;
     }
     if(len-i < 8) {
@@ -232,7 +232,7 @@ int pt_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
     } else {
       memcpy(&val, ((char*)buf)+i, 8);
     }
-    if(pt_setlong(pid, addr+i, val)) {
+    if(gdb_setlong(pid, addr+i, val)) {
       return -1;
     }
   }

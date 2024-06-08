@@ -23,7 +23,7 @@ along with this program; see the file COPYING. If not, see
 
 #include <sys/wait.h>
 
-#include "pt.h"
+#include "gdb_arch.h"
 #include "gdb_pkt.h"
 #include "gdb_resp.h"
 #include "gdb_sig.h"
@@ -134,8 +134,8 @@ gdb_response_continue(gdb_session_t* sess, const char* data, size_t size) {
 
   sig = gdb_sig_toposix(sig);
 
-  if(pt_continue(sess->pid, addr, sig)) {
-    return gdb_pkt_perror(sess->fd, "pt_continue");
+  if(gdb_continue(sess->pid, addr, sig)) {
+    return gdb_pkt_perror(sess->fd, "gdb_continue");
   }
 
   if(gdb_waitpid(sess, buf, sizeof(buf))) {
@@ -170,8 +170,8 @@ gdb_response_detach(gdb_session_t* sess, const char* data, size_t size) {
     }
   }
 
-  if(pt_detach(pid)) {
-    return gdb_pkt_perror(sess->fd, "pt_detach");
+  if(gdb_detach(pid)) {
+    return gdb_pkt_perror(sess->fd, "gdb_detach");
   }
 
   return gdb_pkt_puts(sess->fd, "OK");
@@ -216,8 +216,8 @@ gdb_response_getregs(gdb_session_t* sess, const char* data, size_t size) {
   char buf[GDB_PKT_MAX_SIZE];
   char hex[17];
 
-  if(pt_getregs(sess->pid, gprmap)) {
-    return gdb_pkt_perror(sess->fd, "pt_getregs");
+  if(gdb_getregs(sess->pid, gprmap)) {
+    return gdb_pkt_perror(sess->fd, "gdb_getregs");
   }
 
   buf[0] = 0;
@@ -267,8 +267,8 @@ gdb_response_setregs(gdb_session_t* sess, const char* data, size_t size) {
     gprmap[i] = __builtin_bswap32(val);
   }
 
-  if(pt_setregs(sess->pid, gprmap)) {
-    return gdb_pkt_perror(sess->fd, "pt_setregs");
+  if(gdb_setregs(sess->pid, gprmap)) {
+    return gdb_pkt_perror(sess->fd, "gdb_setregs");
   }
 
   return gdb_pkt_puts(sess->fd, "OK");
@@ -349,7 +349,7 @@ gdb_response_getmem(gdb_session_t* sess, const char* data, size_t size) {
     return -1;
   }
 
-  if(pt_copyout(sess->pid, addr, dbuf, len)) {
+  if(gdb_copyout(sess->pid, addr, dbuf, len)) {
     return gdb_pkt_printf(sess->fd, "E%02X", errno);
   }
 
@@ -396,7 +396,7 @@ gdb_response_setmem(gdb_session_t* sess, const char* data, size_t size) {
     buf[i] = val;
   }
 
-  if(pt_copyin(sess->pid, buf, addr, len)) {
+  if(gdb_copyin(sess->pid, buf, addr, len)) {
     return gdb_pkt_printf(sess->fd, "E%02X", errno);
   }
 
@@ -421,8 +421,8 @@ gdb_response_getreg(gdb_session_t* sess, const char* data, size_t size) {
     return -1;
   }
 
-  if(pt_getreg(sess->pid, reg, &val)) {
-    return gdb_pkt_perror(sess->fd, "pt_getreg");
+  if(gdb_getreg(sess->pid, reg, &val)) {
+    return gdb_pkt_perror(sess->fd, "gdb_getreg");
   }
 
   if(reg <= GDB_GPR_RIP) {
@@ -458,8 +458,8 @@ gdb_response_setreg(gdb_session_t* sess, const char* data, size_t size) {
     val = __builtin_bswap32(val);
   }
 
-  if(pt_setreg(sess->pid, reg, val)) {
-    return gdb_pkt_perror(sess->fd, "pt_getreg");
+  if(gdb_setreg(sess->pid, reg, val)) {
+    return gdb_pkt_perror(sess->fd, "gdb_getreg");
   }
 
   return gdb_pkt_puts(sess->fd, "OK");
@@ -595,8 +595,8 @@ gdb_response_step(gdb_session_t* sess, const char* data, size_t size) {
 
   sig = gdb_sig_toposix(sig);
 
-  if(pt_step(sess->pid, addr, sig)) {
-    return gdb_pkt_perror(sess->fd, "pt_step");
+  if(gdb_step(sess->pid, addr, sig)) {
+    return gdb_pkt_perror(sess->fd, "gdb_step");
   }
 
   if(gdb_waitpid(sess, buf, sizeof(buf))) {

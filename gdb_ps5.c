@@ -21,7 +21,7 @@ along with this program; see the file COPYING. If not, see
 #include <ps5/kernel.h>
 #include <ps5/mdbg.h>
 
-#include "pt.h"
+#include "gdb_arch.h"
 
 
 static int
@@ -61,13 +61,13 @@ sys_ptrace(int request, pid_t pid, caddr_t addr, int data) {
 
 
 int
-pt_traceme(void) {
+gdb_traceme(void) {
   return sys_ptrace(PT_TRACE_ME, 0, 0, 0);
 }
 
 
 int
-pt_attach(pid_t pid) {
+gdb_attach(pid_t pid) {
   if(sys_ptrace(PT_ATTACH, pid, 0, 0) == -1) {
     return -1;
   }
@@ -81,7 +81,7 @@ pt_attach(pid_t pid) {
 
 
 int
-pt_detach(pid_t pid) {
+gdb_detach(pid_t pid) {
   if(sys_ptrace(PT_DETACH, pid, 0, 0) == -1) {
     return -1;
   }
@@ -91,7 +91,7 @@ pt_detach(pid_t pid) {
 
 
 int
-pt_step(int pid, intptr_t addr, int sig) {
+gdb_step(int pid, intptr_t addr, int sig) {
   if(sys_ptrace(PT_STEP, pid, (caddr_t)addr, 0)) {
     return -1;
   }
@@ -101,7 +101,7 @@ pt_step(int pid, intptr_t addr, int sig) {
 
 
 int
-pt_continue(pid_t pid, intptr_t addr, int sig) {
+gdb_continue(pid_t pid, intptr_t addr, int sig) {
   if(sys_ptrace(PT_CONTINUE, pid, (caddr_t)addr, sig) == -1) {
     return -1;
   }
@@ -111,7 +111,7 @@ pt_continue(pid_t pid, intptr_t addr, int sig) {
 
 
 int
-pt_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
+gdb_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
   struct reg r;
 
   if(ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
@@ -148,7 +148,7 @@ pt_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
 }
 
 int
-pt_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
+gdb_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   struct reg r;
 
   if(ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
@@ -171,7 +171,7 @@ pt_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   r.r_r13 = gprmap[GDB_GPR_R13];
   r.r_r14 = gprmap[GDB_GPR_R14];
   r.r_r15 = gprmap[GDB_GPR_R15];
-  r.r_rip = gprmap[GDB_GPR_RIP] & 0xffffffffffffffffl;
+  r.r_rip = gprmap[GDB_GPR_RIP];
   r.r_rflags = gprmap[GDB_GPR_EFLAGS];
   r.r_cs = gprmap[GDB_GPR_CS];
   r.r_ss = gprmap[GDB_GPR_SS];
@@ -189,41 +189,41 @@ pt_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
 
 
 int
-pt_setreg(pid_t pid, enum gdb_gpr reg, uint64_t val) {
+gdb_setreg(pid_t pid, enum gdb_gpr reg, uint64_t val) {
   uint64_t gprmap[GDB_GPR_MAX];
 
-  if(pt_getregs(pid, gprmap)) {
+  if(gdb_getregs(pid, gprmap)) {
     return -1;
   }
 
   gprmap[reg] = val;
 
-  return pt_setregs(pid, gprmap);
+  return gdb_setregs(pid, gprmap);
 }
 
 
 int
-pt_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val) {
+gdb_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val) {
   uint64_t gprmap[GDB_GPR_MAX];
 
-  if(pt_getregs(pid, gprmap)) {
+  if(gdb_getregs(pid, gprmap)) {
     return -1;
   }
 
-  *val = gprmap[reg] & 0xffffffffffffffffl;
+  *val = gprmap[reg];
 
   return 0;
 }
 
 
 int
-pt_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
+gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
   return mdbg_copyin(pid, buf, addr, len);
 }
 
 
 int
-pt_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
+gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
   return mdbg_copyout(pid, addr, buf, len);
 }
 
