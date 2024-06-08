@@ -92,6 +92,10 @@ gdb_detach(pid_t pid) {
 
 int
 gdb_step(int pid, intptr_t addr, int sig) {
+  if(!addr) {
+    addr = 1;
+  }
+
   if(sys_ptrace(PT_STEP, pid, (caddr_t)addr, 0)) {
     return -1;
   }
@@ -102,6 +106,10 @@ gdb_step(int pid, intptr_t addr, int sig) {
 
 int
 gdb_continue(pid_t pid, intptr_t addr, int sig) {
+  if(!addr) {
+    addr = 1;
+  }
+
   if(sys_ptrace(PT_CONTINUE, pid, (caddr_t)addr, sig) == -1) {
     return -1;
   }

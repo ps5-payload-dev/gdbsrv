@@ -54,7 +54,7 @@ static char target_xml[] = "<?xml version=\"1.0\"?>\n" \
 
 
 /**
- * Wait for a signal and report it to the client.
+ * Wait for a signal, and copy a gdb packet response to *data*.
  **/
 static int
 gdb_waitpid(gdb_session_t* sess, char* data, size_t size) {
