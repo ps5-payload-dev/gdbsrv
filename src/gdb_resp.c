@@ -734,9 +734,9 @@ static int
 gdb_response_fsopen(gdb_session_t* sess, const char* data, size_t size) {
   char buf[GDB_PKT_MAX_SIZE];
   char filename[PATH_MAX];
-  mode_t mode;
   char *tok;
   int flags;
+  int mode;
   int fd;
 
   data += 11;

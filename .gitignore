@@ -1,5 +1,4 @@
 *~
-gdbsrv.pc
-gdbsrv.elf
+*.elf
 .gdb_history
 

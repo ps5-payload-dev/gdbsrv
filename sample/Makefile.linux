@@ -1,4 +1,4 @@
-#   Copyright (C) 2023 John Törnblom
+#   Copyright (C) 2024 John Törnblom
 #
 # This file is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -14,25 +14,18 @@
 # along with this program; see the file COPYING. If not see
 # <http://www.gnu.org/licenses/>.
 
-PS5_HOST ?= ps5
+BIN  := sample.linux.elf
+SRCS := sample.c
 
-ifdef PS5_PAYLOAD_SDK
-    include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
-else
-    $(error PS5_PAYLOAD_SDK is undefined)
-endif
-
-BIN   := gdbsrv.elf
-SRCS := src/gdb_resp.c src/gdb_pkt.c src/gdb_sig.c src/gdb_serve.c \
-        src/main_ps5.c src/gdb_ps5.c
-
-CFLAGS := -Wall -DGDB_PKT_TRACE
+CFLAGS := -Wall -Werror
 
 all: $(BIN)
 
 clean:
 	rm -rf $(BIN)
 
-$(BIN): $(SRCS)
-	$(CC) $(CFLAGS) -o $@ $^
+test: $(BIN)
+	gdb -x sample.linux.gdb
 
+$(BIN): $(SRCS)
+	$(CC) -g -static $(CFLAGS) -o $@ $^

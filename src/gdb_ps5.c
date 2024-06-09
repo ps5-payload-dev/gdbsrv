@@ -236,3 +236,19 @@ gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
 }
 
 
+int
+gdb_spawn(char* filename) {
+  char* argv[] = {filename, 0};
+  pid_t pid = fork();
+
+  if(!pid) {
+    if(gdb_traceme()) {
+      _exit(-1);
+    }
+
+    return execve(filename, argv, 0);
+  }
+
+  return pid;
+}
+

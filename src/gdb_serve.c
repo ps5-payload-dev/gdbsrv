@@ -15,22 +15,18 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include <signal.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+
 #include <sys/socket.h>
 
-#include "gdb_arch.h"
 #include "gdb_resp.h"
 
 
 /**
- *
+ * Accept TCP connections.
  **/
 static int
 gdb_conn_accept(uint16_t port) {
@@ -85,10 +81,7 @@ gdb_conn_accept(uint16_t port) {
 }
 
 
-/**
- *
- **/
-static int
+int
 gdb_serve(uint16_t port) {
   int fd;
 
@@ -109,9 +102,3 @@ gdb_serve(uint16_t port) {
   return 0;
 }
 
-
-int main(int argc, char** argv, char** envp) {
-  uint16_t port = 1234;
-
-  return gdb_serve(port);
-}
