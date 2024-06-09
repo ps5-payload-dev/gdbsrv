@@ -457,16 +457,12 @@ gdb_response_setmem(gdb_session_t* sess, const char* data, size_t size) {
     return gdb_pkt_printf(sess->fd, "E00");
   }
 
-  data = strstr(data, ":") + 1;
-  for(int i=0; i<len; i++) {
-    int val;
-    if(sscanf(data, "%02x", &val) != 1) {
-      return -1;
-    }
-    data += 2;
-    buf[i] = val;
+  if(!(data=strstr(data, ":"))) {
+    return -1;
   }
-
+  if(gdb_hex2bin(data+1, buf, sizeof(buf))) {
+    return -1;
+  }
   if(gdb_copyin(sess->pid, buf, addr, len)) {
     return gdb_pkt_printf(sess->fd, "E%02X", errno);
   }
