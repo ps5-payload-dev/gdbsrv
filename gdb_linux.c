@@ -239,3 +239,21 @@ int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
 
   return 0;
 }
+
+
+int
+gdb_spawn(char* filename) {
+  char* argv[] = {filename, 0};
+  pid_t pid = fork();
+
+  if(!pid) {
+    if(gdb_traceme()) {
+      perror("gdb_traceme");
+      _exit(-1);
+    }
+
+    return execve(filename, argv, 0);
+  }
+
+  return pid;
+}
