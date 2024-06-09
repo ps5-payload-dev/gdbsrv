@@ -85,13 +85,17 @@ gdb_getchar(int fd) {
  **/
 static int
 gdb_pkt_sync(int fd) {
+  int c;
   while(1) {
-    switch(gdb_getchar(fd)) {
+    c = gdb_getchar(fd);
+    switch(c) {
     case '$':
       return 0;
     case -1:
+      printf("sync: ignoring %02x\n", c);
       return -1;
     default:
+      printf("sync: ignoring %02x\n", c);
       continue;
     }
   }
