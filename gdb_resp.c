@@ -15,6 +15,8 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,6 +56,52 @@ static char target_xml[] = "<?xml version=\"1.0\"?>\n" \
 
 
 /**
+ * Unescape binary data trasnmitted from gdb.
+ **/
+static int
+gdb_bin_unescape(char *data, int len) {
+  char *w = data;
+  char *r = data;
+
+  while(r-data < len) {
+    char v = *r++;
+    if(v != '}') {
+      *w++ = v;
+      continue;
+    }
+    *w++ = *r++ ^ 0x20;
+  }
+
+  return w - data;
+}
+
+
+/**
+ * Convert a hexstring into its binary representation.
+ **/
+static int
+gdb_hex2bin(const char* str, void* bin, size_t size) {
+  int len = strlen(str);
+  uint8_t* ptr = bin;
+  int ch;
+
+  if(len > size*2 || len%2) {
+    return -1;
+  }
+
+  memset(bin, 0, size);
+  for(int i=0; i<len; i+=2, ptr++) {
+    if(sscanf(str+i, "%02x", &ch) != 1) {
+      return -1;
+    }
+    *ptr = ch;
+  }
+
+  return 0;
+}
+
+
+/**
  * Wait for a signal, and copy a gdb packet response to *data*.
  **/
 static int
@@ -81,6 +129,21 @@ gdb_waitpid(gdb_session_t* sess, char* data, size_t size) {
 
 
 /**
+ * Input pattern: '!'
+ *
+ * Enable extended mode. In extended mode, the remote server is made persistent.
+ * The 'R' packet is used to restart the program being debugged.
+ *
+ * Reply:
+ *   'OK' - The remote target both supports and has enabled extended mode.
+ **/
+static int
+gdb_response_extended_mode(gdb_session_t* sess, const char* data, size_t size) {
+  return gdb_pkt_puts(sess->fd, "OK");
+}
+
+
+/**
  * Input pattern: '?'
  *
  * This is sent when connection is first established to query the reason the
@@ -93,7 +156,13 @@ gdb_waitpid(gdb_session_t* sess, char* data, size_t size) {
  **/
 static int
 gdb_response_getsig(gdb_session_t* sess, const char* data, size_t size) {
-  return gdb_pkt_printf(sess->fd, "S%02X", gdb_sig_fromposix(sess->sig));
+  int exit_code = 0;
+
+  if(sess->pid > 0) {
+    return gdb_pkt_printf(sess->fd, "S%02X", gdb_sig_fromposix(sess->sig));
+  } else {
+    return gdb_pkt_printf(sess->fd, "W%02X", exit_code);
+  }
 }
 
 
@@ -173,6 +242,8 @@ gdb_response_detach(gdb_session_t* sess, const char* data, size_t size) {
   if(gdb_detach(pid)) {
     return gdb_pkt_perror(sess->fd, "gdb_detach");
   }
+
+  sess->pid = -1;
 
   return gdb_pkt_puts(sess->fd, "OK");
 }
@@ -466,6 +537,30 @@ gdb_response_setreg(gdb_session_t* sess, const char* data, size_t size) {
 }
 
 
+
+
+/**
+ * Input pattern: 'qAttached:pid'
+ *
+ * Return an indication of whether the remote server attached to an existing
+ * process or created a new process. When the multiprocess protocol extensions
+ * are supported (see multiprocess extensions), pid is an integer in hexadecimal
+ * format identifying the target process. Otherwise, GDB will omit the pid field
+ * and the query packet will be simplified as 'qAttached'.
+ *
+ * This query is used, for example, to know whether the remote process should be
+ * detached or killed when a GDB session is ended with the quit command.
+ *
+ * Reply:
+    '1' - The remote server attached to an existing process.
+    '0' - The remote server created a new process.
+**/
+static int
+gdb_response_attached(gdb_session_t* sess, const char* data, size_t size) {
+  return gdb_pkt_printf(sess->fd, "%d", sess->pid > 0);
+}
+
+
 /**
  * Input pattern: 'qOffsets'
  *
@@ -532,7 +627,7 @@ static int
 gdb_response_supported(gdb_session_t* sess, const char* data, size_t size) {
   char s[GDB_PKT_MAX_SIZE];
 
-  sprintf(s, "PacketSize=%d", GDB_PKT_MAX_SIZE);
+  sprintf(s, "PacketSize=%x", GDB_PKT_MAX_SIZE-0x100);
   strcat(s, ";qXfer:features:read+");
 
   return gdb_pkt_puts(sess->fd, s);
@@ -608,13 +703,168 @@ gdb_response_step(gdb_session_t* sess, const char* data, size_t size) {
 
 
 /**
+ * Input pattern: 'vFile:setfs:pid'
  *
+ * Select the filesystem on which vFile operations with filename arguments will
+ * operate. This is required for GDB to be able to access files on remote
+ * targets where the remote stub does not share a common filesystem with the
+ * inferior(s).
+ *
+ * If pid is nonzero, select the filesystem as seen by process pid. If pid is
+ * zero, select the filesystem as seen by the remote stub. Return 0 on success,
+ * or -1 if an error occurs. If vFile:setfs: indicates success, the selected
+ * filesystem remains selected until the next successful vFile:setfs: operation.
  **/
+static int
+gdb_response_setfs(gdb_session_t* sess, const char* data, size_t size) {
+  return gdb_pkt_puts(sess->fd, "F0");
+}
+
+
+/**
+ * Input pattern: 'vFile:open: filename, flags, mode'
+ *
+ * Open a file at filename and return a file descriptor for it, or return -1
+ * if an error occurs. The filename is a string, flags is an integer indicating
+ * a mask of open flags (see Open Flags), and mode is an integer indicating a
+ * mask of mode bits to use if the file is created (see mode_t Values).
+ * See open, for details of the open flags and mode values.
+ **/
+static int
+gdb_response_fsopen(gdb_session_t* sess, const char* data, size_t size) {
+  char buf[GDB_PKT_MAX_SIZE];
+  char filename[PATH_MAX];
+  mode_t mode;
+  char *tok;
+  int flags;
+  int fd;
+
+  data += 11;
+  strcpy(buf, data);
+  if(!(tok=strstr(buf, ","))) {
+    return -1;
+  }
+  *tok = 0;
+
+  if(gdb_hex2bin(buf, filename, sizeof(filename))) {
+    return -1;
+  }
+  if(sscanf(tok+1, "%x,%x", &flags, &mode) != 2) {
+    return -1;
+  }
+
+  if((fd=open(filename, flags | O_CREAT, mode)) < 0) {
+    return gdb_pkt_printf(sess->fd, "F-1,%x", errno);
+  }
+
+  return gdb_pkt_printf(sess->fd, "F%x", fd);
+}
+
+
+/**
+ * Input pattern: 'vFile:close: fd'
+ *
+ * Close the open file corresponding to fd and return 0, or -1 if an
+ * error occurs.
+ **/
+static int
+gdb_response_fsclose(gdb_session_t* sess, const char* data, size_t size) {
+  int fd;
+
+  if(sscanf(data, "vFile:close:%x", &fd) != 1) {
+    return -1;
+  }
+
+  if(close(fd)) {
+    return gdb_pkt_printf(sess->fd, "F-1,%x", errno);
+  } else {
+    return gdb_pkt_puts(sess->fd, "F0");
+  }
+}
+
+
+/**
+ * Input pattern: 'vFile:pwrite: fd, offset, data'
+ *
+ * Write data (a binary buffer) to the open file corresponding to fd. Start the
+ * write at offset from the start of the file. Unlike many write system calls,
+ * there is no separate count argument; the length of data in the packet is
+ * used. 'vFile:pwrite' returns the number of bytes written, which may be
+ * shorter than the length of data, or -1 if an error occurred.
+ **/
+static int
+gdb_response_fswrite(gdb_session_t* sess, const char* data, size_t size) {
+  char buf[GDB_PKT_MAX_SIZE];
+  const char* tok;
+  ssize_t len;
+  off_t off = 0;
+  int fd;
+
+  if(sscanf(data, "vFile:pwrite:%x,%lx", &fd, &off) != 2) {
+    return -1;
+  }
+
+  if(!(tok=strstr(data, ","))) {
+    return -1;
+  }
+  if(!(tok=strstr(tok+1, ","))) {
+    return -1;
+  }
+
+  tok += 1;
+  len = size - (size_t)(tok - data);
+
+  memcpy(buf, tok, len);
+  len = gdb_bin_unescape(buf, len);
+
+  if(lseek(fd, off, SEEK_SET) == -1) {
+    return gdb_pkt_printf(sess->fd, "F-1,%x", errno);
+  }
+  if((len=write(fd, buf, len)) == -1) {
+    return gdb_pkt_printf(sess->fd, "F-1,%x", errno);
+  }
+
+  return gdb_pkt_printf(sess->fd, "F%x", len);
+}
+
+
+/**
+ * Input pattern: 'vRun;filename[;argument]...'
+ *
+ * Run the program filename, passing it each argument on its command line.
+ * The file and arguments are hex-encoded strings. If filename is an empty
+ * string, the stub may use a default program (e.g. the last program run).
+ * The program is created in the stopped state.
+ *
+ * This packet is only available in extended mode (see extended mode).
+ *
+ * Reply:
+     Any stop packet for success (see Stop Reply Packets).
+ **/
+static int
+gdb_response_run(gdb_session_t* sess, const char* data, size_t size) {
+  char filename[PATH_MAX];
+  data += 5;
+  if(gdb_hex2bin(data, filename, sizeof(filename))) {
+    return -1;
+  }
+
+  if((sess->pid=gdb_spawn(filename))) {
+    return gdb_pkt_puts(sess->fd, "X-1");
+  }
+
+  return gdb_pkt_puts(sess->fd, "S05");
+}
+
+
 static int
 gdb_response(void* ctx, const char* data, size_t size) {
   gdb_session_t* sess = (gdb_session_t*)ctx;
 
   switch(data[0]) {
+  case '!':
+    return gdb_response_extended_mode(sess, data, size);
+
   case '?':
     return gdb_response_getsig(sess, data, size);
 
@@ -647,6 +897,9 @@ gdb_response(void* ctx, const char* data, size_t size) {
     return gdb_response_setreg(sess, data, size);
 
   case 'q':
+    if(STR_START_WITH(data, "qAttached")) {
+      return gdb_response_attached(sess, data, size);
+    }
     if(!strcmp(data, "qOffsets")) {
       return gdb_response_offsets(sess, data, size);
     }
@@ -662,6 +915,23 @@ gdb_response(void* ctx, const char* data, size_t size) {
   case 'S':
     return gdb_response_step(sess, data, size);
 
+  case 'v':
+    if(STR_START_WITH(data, "vFile:setfs")) {
+      return gdb_response_setfs(sess, data, size);
+    }
+    if(STR_START_WITH(data, "vFile:open")) {
+      return gdb_response_fsopen(sess, data, size);
+    }
+    if(STR_START_WITH(data, "vFile:close")) {
+      return gdb_response_fsclose(sess, data, size);
+    }
+    if(STR_START_WITH(data, "vFile:pwrite")) {
+      return gdb_response_fswrite(sess, data, size);
+    }
+    if(STR_START_WITH(data, "vRun")) {
+      return gdb_response_run(sess, data, size);
+    }
+
   default:
     return gdb_pkt_puts(sess->fd, "");
   }
@@ -671,10 +941,10 @@ gdb_response(void* ctx, const char* data, size_t size) {
 
 
 void
-gdb_response_session(int fd, pid_t pid) {
+gdb_response_session(int fd) {
   gdb_session_t sess = {
     .fd = fd,
-    .pid = pid,
+    .pid = -1,
     .sig = 0
   };
 
@@ -684,5 +954,7 @@ gdb_response_session(int fd, pid_t pid) {
     }
   }
 
-  kill(pid, SIGSTOP);
+  if(sess.pid > 0) {
+    kill(sess.pid, SIGKILL);
+  }
 }

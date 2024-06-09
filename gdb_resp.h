@@ -22,4 +22,4 @@ along with this program; see the file COPYING. If not, see
 /**
  * Respond to requests from a gdb session.
  **/
-void gdb_response_session(int fd, pid_t pid);
+void gdb_response_session(int fd);

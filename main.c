@@ -89,10 +89,10 @@ gdb_conn_accept(uint16_t port) {
  *
  **/
 static int
-gdb_serve(uint16_t port, pid_t pid) {
+gdb_serve(uint16_t port) {
   int fd;
 
-  printf("serving pid %d on port %d\n", pid, port);
+  printf("serving gdb on port %d\n", port);
   signal(SIGPIPE, SIG_IGN);
 
   while(1) {
@@ -102,7 +102,7 @@ gdb_serve(uint16_t port, pid_t pid) {
     }
 
     printf("Starting session for fd %d\n", fd);
-    gdb_response_session(fd, pid);
+    gdb_response_session(fd);
     close(fd);
   }
 
@@ -112,16 +112,6 @@ gdb_serve(uint16_t port, pid_t pid) {
 
 int main(int argc, char** argv, char** envp) {
   uint16_t port = 1234;
-  pid_t pid = fork();
 
-  if(!pid) {
-    if(gdb_traceme()) {
-      perror("gdb_traceme");
-      _exit(-1);
-    }
-
-    return execve(argv[1], &argv[1], envp);
-  }
-
-  return gdb_serve(port, pid);
+  return gdb_serve(port);
 }
