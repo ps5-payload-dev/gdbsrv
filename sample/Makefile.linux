@@ -14,18 +14,26 @@
 # along with this program; see the file COPYING. If not see
 # <http://www.gnu.org/licenses/>.
 
-BIN  := sample.linux.elf
-SRCS := sample.c
+LINUX_HOST ?= localhost
 
-CFLAGS := -Wall -Werror
+BIN  := payload-linux.elf
+SRCS := payload.c
+
+CFLAGS := -Wall -Werror -g
+LDADD :=
 
 all: $(BIN)
 
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)
-	gdb -x sample.linux.gdb
-
 $(BIN): $(SRCS)
-	$(CC) -g -static $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(LDADD) -o $@ $^
+
+test: $(BIN)
+	gdb \
+	-ex "target extended-remote $(LINUX_HOST):2159" \
+	-ex "file $(BIN)" \
+	-ex "remote put $(BIN) /data/$(BIN)" \
+	-ex "set remote exec-file /data/$(BIN)" \
+	-ex "start"

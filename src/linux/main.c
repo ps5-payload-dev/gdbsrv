@@ -21,7 +21,7 @@ along with this program; see the file COPYING. If not, see
 
 
 int main(int argc, char** argv, char** envp) {
-  uint16_t port = 1234;
+  uint16_t port = 2159;
 
   while(1) {
     gdb_serve(port);

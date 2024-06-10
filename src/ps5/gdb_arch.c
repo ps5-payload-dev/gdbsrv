@@ -22,6 +22,7 @@ along with this program; see the file COPYING. If not, see
 #include <ps5/mdbg.h>
 
 #include "gdb_arch.h"
+#include "elfldr.h"
 
 
 static int
@@ -122,7 +123,7 @@ int
 gdb_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
   struct reg r;
 
-  if(ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
+  if(sys_ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
     return -1;
   }
 
@@ -159,7 +160,7 @@ int
 gdb_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   struct reg r;
 
-  if(ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
+  if(sys_ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
     return -1;
   }
 
@@ -188,7 +189,7 @@ gdb_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   r.r_fs = gprmap[GDB_GPR_FS];
   r.r_gs = gprmap[GDB_GPR_GS];
 
-  if(ptrace(PT_SETREGS, pid, (caddr_t)&r, 0) == -1) {
+  if(sys_ptrace(PT_SETREGS, pid, (caddr_t)&r, 0) == -1) {
     return -1;
   }
 
@@ -237,18 +238,7 @@ gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
 
 
 int
-gdb_spawn(char* filename) {
-  char* argv[] = {filename, 0};
-  pid_t pid = fork();
-
-  if(!pid) {
-    if(gdb_traceme()) {
-      _exit(-1);
-    }
-
-    return execve(filename, argv, 0);
-  }
-
-  return pid;
+gdb_spawn(char* argv[], intptr_t* baseaddr) {
+  return elfldr_spawn(argv, baseaddr);
 }
 

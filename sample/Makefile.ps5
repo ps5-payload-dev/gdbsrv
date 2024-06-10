@@ -15,7 +15,6 @@
 # <http://www.gnu.org/licenses/>.
 
 PS5_HOST ?= ps5
-PS5_PORT ?= 9021
 
 ifdef PS5_PAYLOAD_SDK
     include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
@@ -23,12 +22,11 @@ else
     $(error PS5_PAYLOAD_SDK is undefined)
 endif
 
-BIN   := gdbsrv.elf
-SRCS := src/gdb_serve.c src/gdb_resp.c src/gdb_sig.c src/gdb_pkt.c
-SRCS += src/ps5/main.c src/ps5/gdb_arch.c src/ps5/pt.c src/ps5/elfldr.c
+BIN  := payload-ps5.elf
+SRCS := payload.c
 
-CFLAGS := -Isrc -Wall -DGDB_PKT_TRACE
-LDADD := -lkernel_sys
+CFLAGS := -Wall -Werror -g
+LDADD := 
 
 all: $(BIN)
 
@@ -39,4 +37,9 @@ $(BIN): $(SRCS)
 	$(CC) $(CFLAGS) $(LDADD) -o $@ $^
 
 test: $(BIN)
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
+	gdb \
+	-ex "target extended-remote $(PS5_HOST):2159" \
+	-ex "file $(BIN)" \
+	-ex "remote put $(BIN) /data/$(BIN)" \
+	-ex "set remote exec-file /data/$(BIN)" \
+	-ex "start"

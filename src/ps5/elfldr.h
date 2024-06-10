@@ -14,21 +14,8 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
-#include <stdio.h>
-#include <unistd.h>
+#pragma once
 
+#include <stdint.h>
 
-void _start(void);
-
-
-int main() {
-  int x = 0;
-
-  while(1) {
-    sleep(1);
-    printf("pid=%d, _start=%p, x=%d\n", getpid(), _start, x);
-    x += 1;
-  }
-
-  return 0;
-}
+pid_t elfldr_spawn(char* argv[], intptr_t* baseaddr);

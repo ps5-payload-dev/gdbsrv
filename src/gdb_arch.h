@@ -69,4 +69,4 @@ int gdb_setreg(pid_t pid, enum gdb_gpr reg, uint64_t val);
 int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len);
 int gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len);
 
-int gdb_spawn(char* filename);
+pid_t gdb_spawn(char* argv[], intptr_t* baseaddr);

@@ -41,6 +41,7 @@ typedef struct gdb_session {
   pid_t pid;
   int fd;
   int sig;
+  intptr_t baseaddr;
 } gdb_session_t;
 
 
@@ -51,7 +52,7 @@ static char target_xml[] = "<?xml version=\"1.0\"?>\n" \
   "<!DOCTYPE target SYSTEM \"gdb-target.dtd\">\n"
   "<target>\n"
   "<architecture>i386:x86-64</architecture>\n"
-  "<osabi>GNU/Linux</osabi>\n" // TODO: remove osabi?
+  "<osabi>none</osabi>\n"
   "</target>\n";
 
 
@@ -376,8 +377,7 @@ gdb_response_kill(gdb_session_t* sess, const char* data, size_t size) {
     return gdb_pkt_perror(sess->fd, "kill");
   }
 
-  close(sess->fd);
-  exit(0);
+  return -1;
 }
 
 
@@ -585,15 +585,8 @@ gdb_response_attached(gdb_session_t* sess, const char* data, size_t size) {
  **/
 static int
 gdb_response_offsets(gdb_session_t* sess, const char* data, size_t size) {
-  intptr_t text_addr = 0;
-  intptr_t data_addr = 0;
-  intptr_t bss_addr = 0;
-
-  // TODO: add needed parameters for implementing 'qOffsets'
-  return gdb_pkt_printf(sess->fd, "");
-
   return gdb_pkt_printf(sess->fd, "Text=%lx;Data=%lx;Bss=%lx",
-			text_addr, data_addr, bss_addr);
+			sess->baseaddr, 0, 0);
 }
 
 
@@ -840,16 +833,20 @@ gdb_response_fswrite(gdb_session_t* sess, const char* data, size_t size) {
 static int
 gdb_response_run(gdb_session_t* sess, const char* data, size_t size) {
   char filename[PATH_MAX];
+  char* argv[] = {filename, 0};
+  
   data += 5;
   if(gdb_hex2bin(data, filename, sizeof(filename))) {
     return -1;
   }
 
-  if((sess->pid=gdb_spawn(filename))) {
+  if((sess->pid=gdb_spawn(argv, &sess->baseaddr)) < 0) {
     return gdb_pkt_puts(sess->fd, "X-1");
   }
 
-  return gdb_pkt_puts(sess->fd, "S05");
+  sess->sig = SIGSTOP;
+
+  return gdb_pkt_printf(sess->fd, "S%02X", gdb_sig_fromposix(sess->sig));
 }
 
 
@@ -941,7 +938,8 @@ gdb_response_session(int fd) {
   gdb_session_t sess = {
     .fd = fd,
     .pid = -1,
-    .sig = 0
+    .sig = 0,
+    .baseaddr = 0
   };
 
   while(1) {
@@ -950,6 +948,9 @@ gdb_response_session(int fd) {
     }
   }
 
+  if(sess.fd > 0) {
+    close(fd);
+  }
   if(sess.pid > 0) {
     kill(sess.pid, SIGKILL);
   }

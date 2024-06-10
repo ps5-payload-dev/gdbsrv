@@ -242,18 +242,47 @@ int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
 
 
 int
-gdb_spawn(char* filename) {
-  char* argv[] = {filename, 0};
-  pid_t pid = fork();
+gdb_spawn(char* argv[], intptr_t* baseaddr) {
+  char path[255];
+  char line[255];
+  intptr_t addr1;
+  intptr_t addr2;
+  char perms[5];
+  FILE *file;
+  pid_t pid;
 
-  if(!pid) {
+  if(!(pid=fork())) {
     if(gdb_traceme()) {
       perror("gdb_traceme");
       _exit(-1);
     }
 
-    return execve(filename, argv, 0);
+    return execve(argv[0], argv, 0);
   }
+
+  if(!baseaddr) {
+    return pid;
+  }
+
+  // TODO: wait for execve to finish
+  usleep(800000);
+
+  sprintf(path, "/proc/%d/maps", pid);
+  if(!(file=fopen(path, "r"))) {
+    perror("fopen");
+    return -1;
+  }
+
+  while(fgets(line, sizeof(line), file)) {
+    puts(line);
+    if(sscanf(line, "%lx-%lx %4s", &addr1, &addr2, perms) != 3) {
+      continue;
+    }
+    *baseaddr = addr1;
+    break;
+  }
+
+  fclose(file);
 
   return pid;
 }

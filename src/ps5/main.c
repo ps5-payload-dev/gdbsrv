@@ -23,6 +23,8 @@ along with this program; see the file COPYING. If not, see
 #include <sys/syscall.h>
 #include <sys/sysctl.h>
 
+#include <ps5/kernel.h>
+
 #include "gdb_serve.h"
 
 
@@ -71,7 +73,7 @@ find_pid(const char* name) {
 
 
 int main(int argc, char** argv, char** envp) {
-  uint16_t port = 1234;
+  uint16_t port = 2159;
   pid_t pid;
 
   syscall(SYS_thr_set_name, -1, "gdbsrv.elf");
@@ -80,7 +82,7 @@ int main(int argc, char** argv, char** envp) {
   while((pid=find_pid("gdbsrv.elf")) > 0) {
     if(kill(pid, SIGKILL)) {
       perror("kill");
-      _exit(-1);
+      exit(-1);
     }
     sleep(1);
   }
