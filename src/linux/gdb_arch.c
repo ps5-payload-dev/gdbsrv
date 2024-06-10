@@ -241,7 +241,7 @@ int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
 }
 
 
-int
+pid_t
 gdb_spawn(char* argv[], intptr_t* baseaddr) {
   char path[255];
   char line[255];
@@ -274,7 +274,6 @@ gdb_spawn(char* argv[], intptr_t* baseaddr) {
   }
 
   while(fgets(line, sizeof(line), file)) {
-    puts(line);
     if(sscanf(line, "%lx-%lx %4s", &addr1, &addr2, perms) != 3) {
       continue;
     }

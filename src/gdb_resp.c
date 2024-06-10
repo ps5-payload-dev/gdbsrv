@@ -841,7 +841,7 @@ gdb_response_run(gdb_session_t* sess, const char* data, size_t size) {
   }
 
   if((sess->pid=gdb_spawn(argv, &sess->baseaddr)) < 0) {
-    return gdb_pkt_puts(sess->fd, "X-1");
+    return gdb_pkt_printf(sess->fd, "X-1,%d", errno);
   }
 
   sess->sig = SIGSTOP;
