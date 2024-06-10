@@ -34,6 +34,6 @@ test: $(BIN)
 	gdb \
 	-ex "target extended-remote $(LINUX_HOST):2159" \
 	-ex "file $(BIN)" \
-	-ex "remote put $(BIN) /data/$(BIN)" \
-	-ex "set remote exec-file /data/$(BIN)" \
+	-ex "remote put $(BIN) /tmp/$(BIN)" \
+	-ex "set remote exec-file /tmp/$(BIN)" \
 	-ex "start"
