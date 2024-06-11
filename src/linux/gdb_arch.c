@@ -264,12 +264,17 @@ gdb_spawn(char* argv[], intptr_t* baseaddr) {
     return pid;
   }
 
-  // TODO: wait for execve to finish
-  usleep(800000);
+  if(waitpid(pid, 0, 0) == -1) {
+    perror("waitpid");
+    kill(pid, SIGKILL);
+    gdb_detach(pid);
+  }
 
   sprintf(path, "/proc/%d/maps", pid);
   if(!(file=fopen(path, "r"))) {
     perror("fopen");
+    kill(pid, SIGKILL);
+    gdb_detach(pid);
     return -1;
   }
 
