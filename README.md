@@ -9,9 +9,8 @@ To deploy ps5-payload-gdbsrv, first launch the [ps5-payload-elfldr][elfldr],
 then load the payload by issuing the following commands:
 
 ```console
-john@localhost:ps5-payload-dev/gdbsrv$ export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-john@localhost:ps5-payload-dev/gdbsrv$ export PS5_HOST=ps5
-john@localhost:ps5-payload-dev/gdbsrv$ make test
+john@localhost:~$ export PS5_HOST=ps5
+john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/gdbsrv/releases/download/v0.1/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
 ```
 
 Next, launch a new terminal and debug you payload by running the following set of
@@ -24,8 +23,8 @@ john@localhost:ps5-payload-dev/gdbsrv/sample$ make test
 ```
 
 ## Known issues
-Symbols from dynamic sony libraries are not loaded correctly at the moment.
-
+- Symbols from dynamic sony libraries are not loaded correctly at the moment.
+- Signals like SIGINT (Ctrl-C) submitted from gdb are not interpreted correctly.
 
 ## Reporting Bugs
 If you encounter problems with ps5-payload-gdbsrv, please [file a github issue][issues].
