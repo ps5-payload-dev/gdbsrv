@@ -43,8 +43,11 @@ gdb_conn_accept(uint16_t port) {
   }
 
   optval = 1;
-  setsockopt(srvfd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval,
-	     sizeof (optval));
+  if(setsockopt(srvfd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval,
+		sizeof (optval))) {
+    perror("setsockopt");
+    return -1;
+  }
 
   sock_addr.sin_family = PF_INET;
   sock_addr.sin_port = htons(port);
@@ -68,18 +71,23 @@ gdb_conn_accept(uint16_t port) {
     return -1;
   }
 
-  optval = 1;
-  setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char *)&optval,
-	     sizeof (optval));
-
-  optval = 1;
-  setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&optval,
-	     sizeof (optval));
-
-  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | FASYNC);
-  fcntl(fd, F_SETOWN, getpid());
-
   close(srvfd);
+
+  optval = 1;
+  if(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char *)&optval,
+		sizeof (optval))) {
+    perror("setsockopt");
+    close(fd);
+    return -1;
+  }
+
+  optval = 1;
+  if(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&optval,
+		sizeof (optval))) {
+    perror("setsockopt");
+    close(fd);
+    return -1;
+  }
 
   return fd;
 }
@@ -98,7 +106,6 @@ gdb_serve(uint16_t port) {
       continue;
     }
 
-    printf("Starting session for fd %d\n", fd);
     gdb_response_session(fd);
     close(fd);
   }
