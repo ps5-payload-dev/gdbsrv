@@ -14,6 +14,7 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 
@@ -74,6 +75,9 @@ gdb_conn_accept(uint16_t port) {
   optval = 1;
   setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&optval,
 	     sizeof (optval));
+
+  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | FASYNC);
+  fcntl(fd, F_SETOWN, getpid());
 
   close(srvfd);
 
