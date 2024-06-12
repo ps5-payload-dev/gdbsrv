@@ -22,6 +22,7 @@ along with this program; see the file COPYING. If not, see
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <poll.h>
 
 #include <sys/wait.h>
 
@@ -107,22 +108,36 @@ gdb_hex2bin(const char* str, void* bin, size_t size) {
  **/
 static int
 gdb_waitpid(gdb_session_t* sess, char* data, size_t size) {
-  int status;
+  int status = 0;
+  int res;
 
-  if(waitpid(sess->pid, &status, WUNTRACED) < 0) {
-    return -1;
-  }
+  while(1) {
+    if((res=waitpid(sess->pid, &status, WNOHANG)) < 0) {
+      return -1;
+    } else if(!res) {
+      if((res=gdb_pkt_interrupt(sess->fd)) < 0) {
+	return -1;
+      }
+      if(res) {
+	kill(sess->pid, SIGSTOP);
+      }
+      continue;
+    }
 
-  if(WIFEXITED(status)) {
-    snprintf(data, size, "W%02x", WEXITSTATUS(status));
+    if(WIFEXITED(status)) {
+      snprintf(data, size, "W%02x", WEXITSTATUS(status));
+      return 0;
 
-  } else if(WIFSIGNALED(status)) {
-    sess->sig = WTERMSIG(status);
-    snprintf(data, size, "X%02x", gdb_sig_fromposix(sess->sig));
+    } else if(WIFSIGNALED(status)) {
+      sess->sig = WTERMSIG(status);
+      snprintf(data, size, "X%02x", gdb_sig_fromposix(sess->sig));
+      return 0;
 
-  } else if(WIFSTOPPED(status)) {
-    sess->sig = WSTOPSIG(status);
-    snprintf(data, size, "S%02x", gdb_sig_fromposix(sess->sig));
+    } else if(WIFSTOPPED(status)) {
+      sess->sig = WSTOPSIG(status);
+      snprintf(data, size, "S%02x", gdb_sig_fromposix(sess->sig));
+      return 0;
+    }
   }
 
   return 0;

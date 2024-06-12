@@ -60,3 +60,12 @@ int gdb_pkt_printf(int fd, const char* fmt, ...);
  * Respond with a gdb packet as a strerror() string.
  **/
 int gdb_pkt_perror(int fd, const char* str);
+
+
+/**
+ * Check for a Ctrl-c interrupt character.
+ *
+ * TODO: one byte in consumed, so should probobly store a
+ * lookahead somewhere.
+ **/
+int gdb_pkt_interrupt(int fd);

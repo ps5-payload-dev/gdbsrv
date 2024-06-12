@@ -15,6 +15,7 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include <errno.h>
+#include <poll.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -77,6 +78,31 @@ gdb_getchar(int fd) {
       return (c & 0xff);
     }
   }
+}
+
+
+
+int
+gdb_pkt_interrupt(int fd) {
+  struct pollfd fds[1];
+
+  fds[0].fd = fd;
+  fds[0].events = POLLIN;
+
+  switch(poll(fds, 1, 1)) {
+  case -1:
+    return -1;
+  case 0:
+    return 0;
+  default:
+    if(fds[0].revents & POLLIN) {
+      if(gdb_getchar(fd) != 3) {
+	return -1;
+      }
+      return 1;
+    }
+  }
+  return 0;
 }
 
 
