@@ -508,8 +508,8 @@ elfldr_set_procname(pid_t pid, const char* name) {
 }
 
 
-int
-elfldr_exec(pid_t pid, uint8_t* elf, intptr_t* baseaddr) {
+static int
+elfldr_exec(pid_t pid, int stdio, uint8_t* elf, intptr_t* baseaddr) {
   uint8_t privcaps[16] = {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
                           0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
   uint8_t orgcaps[16];
@@ -521,14 +521,26 @@ elfldr_exec(pid_t pid, uint8_t* elf, intptr_t* baseaddr) {
 
   if(kernel_get_ucred_caps(pid, orgcaps)) {
     puts("kernel_get_ucred_caps failed");
-    pt_detach(pid);
     return -1;
   }
   if(kernel_set_ucred_caps(pid, privcaps)) {
     puts("kernel_set_ucred_caps failed");
-    pt_detach(pid);
     return -1;
   }
+
+  if((stdio=pt_rdup(pid, getpid(), stdio)) < 0) {
+    perror("pt_rdup");
+    return -1;
+  }
+  if(pt_dup2(pid, stdio, STDOUT_FILENO) < 0) {
+    perror("pt_dup2");
+    return -1;
+  }
+  if(pt_dup2(pid, stdio, STDERR_FILENO) < 0) {
+    perror("pt_dup2");
+    return -1;
+  }
+  pt_close(pid, stdio);
 
   if(elfldr_prepare_exec(&ctx)) {
     error = -1;
@@ -645,7 +657,7 @@ elfldr_readfile(const char* path) {
  * Execute an ELF inside a new process.
  **/
 pid_t
-elfldr_spawn(char* argv[], intptr_t* baseaddr) {
+elfldr_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
   uint8_t int3instr = 0xcc;
   intptr_t brkpoint;
   uint8_t orginstr;
@@ -725,7 +737,7 @@ elfldr_spawn(char* argv[], intptr_t* baseaddr) {
     return -1;
   }
   
-  if(elfldr_exec(pid, elf, baseaddr)) {
+  if(elfldr_exec(pid, stdio, elf, baseaddr)) {
     kill(pid, SIGKILL);
     pt_detach(pid);
     free(elf);

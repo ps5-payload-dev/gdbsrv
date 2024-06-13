@@ -63,9 +63,12 @@ int gdb_pkt_perror(int fd, const char* str);
 
 
 /**
- * Check for a Ctrl-c interrupt character.
- *
- * TODO: one byte in consumed, so should probobly store a
- * lookahead somewhere.
+ * Respond with a notification message.
  **/
-int gdb_pkt_interrupt(int fd);
+int gdb_pkt_notify(int fd, const char* data, size_t size);
+
+
+/**
+ * Respond with an strerror() notification message.
+ **/
+int gdb_pkt_notify_perror(int fd, const char *s);

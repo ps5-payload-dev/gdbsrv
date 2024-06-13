@@ -42,6 +42,7 @@ typedef struct gdb_session {
   pid_t pid;
   int fd;
   int sig;
+  int stdio;
   intptr_t baseaddr;
 } gdb_session_t;
 
@@ -104,6 +105,68 @@ gdb_hex2bin(const char* str, void* bin, size_t size) {
 
 
 /**
+ * Flush stdout of the interior to the connecting client,
+ * and look for Ctrl-c sequence from the client.
+ **/
+static int
+gdb_response_stdio(gdb_session_t* sess) {
+  struct pollfd fds[2];
+  char buf[0x100];
+  ssize_t len;
+
+  fds[0].fd = sess->stdio;
+  fds[0].events = POLLIN;
+
+  fds[1].fd = sess->fd;
+  fds[1].events = POLLIN;
+
+  switch(poll(fds, 2, 1)) {
+  case -1:
+    if(gdb_pkt_notify_perror(sess->fd, "poll")) {
+      perror("gdb_pkt_notify_perror");
+    }
+    return SIGSTOP;
+
+  case 0:
+    return 0;
+
+  default:
+    if(fds[1].revents & POLLIN) {
+      if((len=read(sess->fd, buf, 1)) < 0) {
+	perror("read");
+	return SIGSTOP;
+      }
+
+      if(buf[0] == 3) {
+	return SIGINT;
+      }
+    }
+
+    if(fds[0].revents & POLLIN) {
+      if((len=read(sess->stdio, buf, sizeof(buf))) < 0) {
+	if(gdb_pkt_notify_perror(sess->fd, "read")) {
+	  perror("gdb_pkt_notify_perror");
+	}
+	return SIGSTOP;
+      }
+
+      if(gdb_pkt_notify(sess->fd, buf, len) < 0) {
+	if(errno == EINTR) {
+	  return SIGINT;
+	}
+
+	perror("gdb_pkt_notify");
+	return SIGSTOP;
+      }
+    }
+  }
+
+  return 0;
+}
+
+
+
+/**
  * Wait for a signal, and copy a gdb packet response to *data*.
  **/
 static int
@@ -112,15 +175,16 @@ gdb_waitpid(gdb_session_t* sess, char* data, size_t size) {
   int res;
 
   while(1) {
+    if((res=gdb_response_stdio(sess))) {
+      kill(sess->pid, res);
+    }
+
     if((res=waitpid(sess->pid, &status, WNOHANG)) < 0) {
       return -1;
-    } else if(!res) {
-      if((res=gdb_pkt_interrupt(sess->fd)) < 0) {
-	return -1;
-      }
-      if(res) {
-	kill(sess->pid, SIGSTOP);
-      }
+    }
+
+    if(!res) {
+      usleep(1);
       continue;
     }
 
@@ -388,6 +452,10 @@ gdb_response_setregs(gdb_session_t* sess, const char* data, size_t size) {
  **/
 static int
 gdb_response_kill(gdb_session_t* sess, const char* data, size_t size) {
+  if(sess->pid < 0) {
+    return gdb_pkt_puts(sess->fd, "");
+  }
+
   if(kill(sess->pid, SIGTERM)) {
     return gdb_pkt_perror(sess->fd, "kill");
   }
@@ -849,17 +917,32 @@ static int
 gdb_response_run(gdb_session_t* sess, const char* data, size_t size) {
   char filename[PATH_MAX];
   char* argv[] = {filename, 0};
-  
+  int fds[2];
+
   data += 5;
   if(gdb_hex2bin(data, filename, sizeof(filename))) {
     return -1;
   }
 
-  if((sess->pid=gdb_spawn(argv, &sess->baseaddr)) < 0) {
+  if(pipe(fds) == -1) {
+    return gdb_pkt_perror(sess->fd, "pipe");
+  }
+
+  if(fcntl(fds[0], F_SETFL, O_NONBLOCK) == -1){
+    close(fds[0]);
+    close(fds[1]);
+    return gdb_pkt_perror(sess->fd, "fcntl");
+  }
+
+  if((sess->pid=gdb_spawn(argv, fds[1], &sess->baseaddr)) < 0) {
+    close(fds[0]);
+    close(fds[1]);
     return gdb_pkt_printf(sess->fd, "X-1,%d", errno);
   }
 
+  close(fds[1]);
   sess->sig = SIGSTOP;
+  sess->stdio = fds[0];
 
   return gdb_pkt_printf(sess->fd, "S%02X", gdb_sig_fromposix(sess->sig));
 }
@@ -964,7 +1047,10 @@ gdb_response_session(int fd) {
   }
 
   if(sess.fd > 0) {
-    close(fd);
+    close(sess.fd);
+  }
+  if(sess.stdio > 0) {
+    close(sess.stdio);
   }
   if(sess.pid > 0) {
     kill(sess.pid, SIGKILL);

@@ -18,4 +18,4 @@ along with this program; see the file COPYING. If not, see
 
 #include <stdint.h>
 
-pid_t elfldr_spawn(char* argv[], intptr_t* baseaddr);
+pid_t elfldr_spawn(char* argv[], int stdout, intptr_t* baseaddr);

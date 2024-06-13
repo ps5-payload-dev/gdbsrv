@@ -81,31 +81,6 @@ gdb_getchar(int fd) {
 }
 
 
-
-int
-gdb_pkt_interrupt(int fd) {
-  struct pollfd fds[1];
-
-  fds[0].fd = fd;
-  fds[0].events = POLLIN;
-
-  switch(poll(fds, 1, 1)) {
-  case -1:
-    return -1;
-  case 0:
-    return 0;
-  default:
-    if(fds[0].revents & POLLIN) {
-      if(gdb_getchar(fd) != 3) {
-	return -1;
-      }
-      return 1;
-    }
-  }
-  return 0;
-}
-
-
 /**
  * Wait for the start symbol of a gdb packet.
  **/
@@ -118,10 +93,8 @@ gdb_pkt_sync(int fd) {
     case '$':
       return 0;
     case -1:
-      printf("sync: ignoring %02x\n", c);
       return -1;
     default:
-      printf("sync: ignoring %02x\n", c);
       continue;
     }
   }
@@ -166,11 +139,34 @@ gdb_pkt_put(int fd, const char* data, size_t size) {
   if(gdb_putchar(fd, hexchars[checksum % 16])) {
     return -1;
   }
-  if(gdb_getchar(fd) != '+') {
+
+  switch(gdb_getchar(fd)) {
+  case 3:
+    // Assume the client transmitted a Ctrl-c charcacter sequence
+    // while an interior is running.
+    errno = EINTR;
+    return -1;
+
+  case '+':
+    return 0;
+
+  default:
+    errno = EPROTO;
     return -1;
   }
+}
 
-  return 0;
+
+int
+gdb_pkt_notify(int fd, const char* data, size_t size) {
+  char buf[1+(size*2)];
+
+  buf[0] = 'O';
+  for(int i=0; i<size; i++) {
+    sprintf(buf+1+(i*2), "%02x", data[i]);
+  }
+
+  return gdb_pkt_put(fd, buf, sizeof(buf));
 }
 
 
@@ -201,6 +197,16 @@ gdb_pkt_printf(int fd, const char *fmt, ...) {
 int
 gdb_pkt_perror(int fd, const char *str) {
   return gdb_pkt_printf(fd, "E.%s: %s", str, strerror(errno));
+}
+
+
+int
+gdb_pkt_notify_perror(int fd, const char *s) {
+  char buf[GDB_PKT_MAX_SIZE/2 - 1];
+
+  sprintf(buf, "%s: %s", s, strerror(errno));
+
+  return gdb_pkt_notify(fd ,buf, strlen(buf));
 }
 
 
@@ -256,3 +262,4 @@ gdb_pkt_get(int fd, gdb_pkt_cb_t* cb, void* ctx) {
   gdb_putchar(fd, '+');
   return cb(ctx, buf, offset);
 }
+

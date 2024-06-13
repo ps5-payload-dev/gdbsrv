@@ -25,9 +25,8 @@ int main() {
   while(1) {
     x += 1;
     y += 2;
-    printf("x=%d, y=%d, main=%p, pid=%d\n",
-	   x, y, main, getpid());
-    sleep(1);
+    printf("x=%d, y=%d, main=%p, pid=%d\n", x, y, main, getpid());
+    //sleep(1);
   }
 
   return 0;

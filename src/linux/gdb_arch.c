@@ -242,7 +242,7 @@ int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
 
 
 pid_t
-gdb_spawn(char* argv[], intptr_t* baseaddr) {
+gdb_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
   char path[255];
   char line[255];
   intptr_t addr1;
@@ -256,6 +256,15 @@ gdb_spawn(char* argv[], intptr_t* baseaddr) {
       perror("gdb_traceme");
       _exit(-1);
     }
+
+    for(int i=1; i<1000; i++) {
+      if(i != stdio) {
+	close(i);
+      }
+    }
+
+    dup2(stdio, STDOUT_FILENO);
+    dup2(stdio, STDERR_FILENO);
 
     return execve(argv[0], argv, 0);
   }

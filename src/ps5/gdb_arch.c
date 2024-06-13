@@ -238,7 +238,7 @@ gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
 
 
 int
-gdb_spawn(char* argv[], intptr_t* baseaddr) {
-  return elfldr_spawn(argv, baseaddr);
+gdb_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
+  return elfldr_spawn(argv, stdio, baseaddr);
 }
 
