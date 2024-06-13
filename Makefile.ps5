@@ -27,7 +27,7 @@ BIN   := gdbsrv.elf
 SRCS := src/gdb_serve.c src/gdb_resp.c src/gdb_sig.c src/gdb_pkt.c
 SRCS += src/ps5/main.c src/ps5/gdb_arch.c src/ps5/pt.c src/ps5/elfldr.c
 
-CFLAGS := -Isrc -Wall -DGDB_PKT_TRACE
+CFLAGS := -Isrc -Wall # -DGDB_PKT_TRACE
 LDADD := -lkernel_sys
 
 all: $(BIN)
