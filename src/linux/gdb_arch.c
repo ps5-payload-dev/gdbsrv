@@ -243,12 +243,6 @@ int gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
 
 pid_t
 gdb_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
-  char path[255];
-  char line[255];
-  intptr_t addr1;
-  intptr_t addr2;
-  char perms[5];
-  FILE *file;
   pid_t pid;
 
   if(!(pid=fork())) {
