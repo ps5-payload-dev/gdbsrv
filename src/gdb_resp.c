@@ -669,7 +669,7 @@ gdb_response_attached(gdb_session_t* sess, const char* data, size_t size) {
 static int
 gdb_response_offsets(gdb_session_t* sess, const char* data, size_t size) {
   return gdb_pkt_printf(sess->fd, "Text=%lx;Data=%lx;Bss=%lx",
-			sess->baseaddr, 0, 0);
+			sess->baseaddr, sess->baseaddr, sess->baseaddr);
 }
 
 
