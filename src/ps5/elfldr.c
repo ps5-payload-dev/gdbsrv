@@ -482,6 +482,11 @@ elfldr_prepare_exec(elfldr_ctx_t *ctx) {
     return -1;
   }
 
+  if(pt_step(ctx->pid)) {
+    perror("pt_step");
+    return -1;
+  }
+
   return 0;
 }
 
