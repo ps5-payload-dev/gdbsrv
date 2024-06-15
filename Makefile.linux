@@ -18,7 +18,7 @@ BIN  := gdbsrv-linux.elf
 SRCS := src/gdb_serve.c src/gdb_resp.c src/gdb_sig.c src/gdb_pkt.c
 SRCS += src/linux/main.c src/linux/gdb_arch.c
 
-CFLAGS := -Isrc -Wall # -DGDB_PKT_TRACE
+CFLAGS := -Isrc -Wall -DGDB_PKT_TRACE
 
 all: $(BIN)
 
