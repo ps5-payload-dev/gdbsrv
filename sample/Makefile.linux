@@ -19,7 +19,7 @@ LINUX_HOST ?= localhost
 BIN  := payload-linux.elf
 SRCS := payload.c
 
-CFLAGS := -Wall -Werror -g
+CFLAGS := -Wall -Werror -g -static
 LDADD :=
 
 all: $(BIN)

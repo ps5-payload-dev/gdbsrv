@@ -269,33 +269,15 @@ gdb_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
     return execve(argv[0], argv, 0);
   }
 
-  if(!baseaddr) {
-    return pid;
-  }
-
   if(waitpid(pid, 0, 0) == -1) {
     perror("waitpid");
     kill(pid, SIGKILL);
     gdb_detach(pid);
   }
 
-  sprintf(path, "/proc/%d/maps", pid);
-  if(!(file=fopen(path, "r"))) {
-    perror("fopen");
-    kill(pid, SIGKILL);
-    gdb_detach(pid);
-    return -1;
+  if(baseaddr) {
+    *baseaddr = 0;
   }
-
-  while(fgets(line, sizeof(line), file)) {
-    if(sscanf(line, "%lx-%lx %4s", &addr1, &addr2, perms) != 3) {
-      continue;
-    }
-    *baseaddr = addr1;
-    break;
-  }
-
-  fclose(file);
 
   return pid;
 }
