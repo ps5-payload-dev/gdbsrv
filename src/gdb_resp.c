@@ -944,6 +944,8 @@ gdb_response_run(gdb_session_t* sess, const char* data, size_t size) {
   sess->sig = SIGSTOP;
   sess->stdio = fds[0];
 
+  printf("Attached to PID: %d, ELF: %s\n", sess->pid, filename);
+
   return gdb_pkt_printf(sess->fd, "S%02X", gdb_sig_fromposix(sess->sig));
 }
 
