@@ -25,7 +25,7 @@ john@localhost:ps5-payload-dev/gdbsrv/sample$ make test
 ## Known issues
 - Symbols from dynamic sony libraries are not loaded correctly at the moment.
 - A couble of arguments passed to the ELF is allocated on the heap, so gdb may
-  report errors when trying to resolve the aeguments to _start()
+  report errors when trying to resolve the arguments to _start()
 
 ## Reporting Bugs
 If you encounter problems with ps5-payload-gdbsrv, please [file a github issue][issues].
