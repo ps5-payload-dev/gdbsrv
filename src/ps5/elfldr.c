@@ -305,60 +305,6 @@ elfldr_load(elfldr_ctx_t* ctx) {
 
 
 /**
- *
- **/
-static intptr_t
-elfldr_envp(pid_t pid) {
-  size_t size = sizeof(char*);
-  intptr_t envp = 0;
-  intptr_t pos = 0;
-  int n = 0;
-
-  // no env variables defined
-  if(!environ || !environ[0]) {
-    return 0;
-  }
-
-  // compute needed memory size and number of variables
-  while(environ[n]) {
-    size += (8 + strlen(environ[n]) + 1);
-    n++;
-  }
-  size = ROUND_PG(size);
-
-  // allocate memory
-  if((envp=pt_mmap(pid, 0, size, PROT_WRITE | PROT_READ,
-		   MAP_ANONYMOUS | MAP_PRIVATE,
-		   -1, 0)) == -1) {
-    pt_perror(pid, "pt_mmap");
-    return 0;
-  }
-
-  // copy data
-  pos = envp + ((n + 1) * 8);
-  for(int i=0; i<n; i++) {
-    size_t len = strlen(environ[i]) + 1;
-
-    // copy string
-    if(mdbg_copyin(pid, environ[i], pos, len)) {
-      perror("mdbg_copyin");
-      pt_munmap(pid, envp, size);
-      return 0;
-    }
-
-    // copy pointer to string 
-    mdbg_setlong(pid, envp + (i*8), pos);
-    pos += len;
-  }
-
-  // null-terminate envp
-  mdbg_setlong(pid, envp + (n*8), 0);
-
-  return envp;
-}
-
-
-/**
  * Create payload args in the address space of the process with the given pid.
  **/
 static intptr_t
@@ -472,9 +418,6 @@ elfldr_prepare_exec(elfldr_ctx_t *ctx) {
   }
 
   r.r_rax = entry;
-  r.r_rcx = elfldr_envp(ctx->pid);
-  r.r_rdx = r.r_rsi; // argv
-  r.r_rsi = r.r_rdi; // argc
   r.r_rdi = args;
 
   if(pt_setregs(ctx->pid, &r)) {
@@ -486,6 +429,32 @@ elfldr_prepare_exec(elfldr_ctx_t *ctx) {
     perror("pt_step");
     return -1;
   }
+
+  return 0;
+}
+
+
+/**
+ * Set the current working directory.
+ **/
+int
+elfldr_set_cwd(pid_t pid, const char* cwd) {
+  intptr_t buf;
+
+  if(!cwd) {
+    cwd = "/";
+  }
+
+  if((buf=pt_mmap(pid, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+		  MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)) == -1) {
+    pt_perror(pid, "pt_mmap");
+    return -1;
+  }
+
+  mdbg_copyin(pid, cwd, buf, strlen(cwd)+1);
+  pt_syscall(pid, SYS_chdir, -1, buf);
+  pt_msync(pid, buf, PAGE_SIZE, MS_SYNC);
+  pt_munmap(pid, buf, PAGE_SIZE);
 
   return 0;
 }
@@ -533,19 +502,21 @@ elfldr_exec(pid_t pid, int stdio, uint8_t* elf, intptr_t* baseaddr) {
     return -1;
   }
 
-  if((stdio=pt_rdup(pid, getpid(), stdio)) < 0) {
-    perror("pt_rdup");
-    return -1;
+  if(stdio >= 0) {
+    if((stdio=pt_rdup(pid, getpid(), stdio)) < 0) {
+      perror("pt_rdup");
+      return -1;
+    }
+    if(pt_dup2(pid, stdio, STDOUT_FILENO) < 0) {
+      perror("pt_dup2");
+      return -1;
+    }
+    if(pt_dup2(pid, stdio, STDERR_FILENO) < 0) {
+      perror("pt_dup2");
+      return -1;
+    }
+    pt_close(pid, stdio);
   }
-  if(pt_dup2(pid, stdio, STDOUT_FILENO) < 0) {
-    perror("pt_dup2");
-    return -1;
-  }
-  if(pt_dup2(pid, stdio, STDERR_FILENO) < 0) {
-    perror("pt_dup2");
-    return -1;
-  }
-  pt_close(pid, stdio);
 
   if(elfldr_prepare_exec(&ctx)) {
     error = -1;
@@ -559,6 +530,82 @@ elfldr_exec(pid_t pid, int stdio, uint8_t* elf, intptr_t* baseaddr) {
   *baseaddr = ctx.base_addr;
   
   return error;
+}
+
+
+/**
+ *
+ **/
+static int
+elfldr_set_environ(pid_t pid, char** envp) {
+  size_t size = sizeof(char*);
+  intptr_t environ_addr = 0;
+  intptr_t envp_addr = 0;
+  intptr_t pos = 0;
+  int n = 0;
+
+  // no env variables defined
+  if(!envp || !envp[0]) {
+    return 0;
+  }
+
+  // compute needed memory size and number of variables
+  while(envp[n]) {
+    size += (8 + strlen(envp[n]) + 1);
+    n++;
+  }
+  size = ROUND_PG(size);
+
+  // allocate memory
+  if((envp_addr=pt_mmap(pid, 0, size, PROT_WRITE | PROT_READ,
+			MAP_ANONYMOUS | MAP_PRIVATE,
+			-1, 0)) == -1) {
+    pt_perror(pid, "pt_mmap");
+    return -1;
+  }
+
+  // copy data
+  pos = envp_addr + ((n + 1) * 8);
+  for(int i=0; i<n; i++) {
+    size_t len = strlen(envp[i]) + 1;
+
+    // copy string
+    if(mdbg_copyin(pid, envp[i], pos, len)) {
+      perror("mdbg_copyin");
+      pt_munmap(pid, envp_addr, size);
+      return -1;
+    }
+
+    // copy pointer to string 
+    if(mdbg_setlong(pid, envp_addr + (i*8), pos)) {
+      perror("mdbg_setlong");
+      pt_munmap(pid, envp_addr, size);
+      return -1;
+    }
+    pos += len;
+  }
+
+  // null-terminate envp_addr
+  if(mdbg_setlong(pid, envp_addr + (n*8), 0)) {
+      perror("mdbg_setlong");
+      pt_munmap(pid, envp_addr, size);
+      return -1;
+  }
+
+  // resolve "environ"
+  if(!(environ_addr=pt_resolve(pid, "+2thxYZ4syk"))) {
+    perror("pt_resolve");
+    pt_munmap(pid, envp_addr, size);
+    return -1;
+  }
+
+  if(mdbg_setlong(pid, environ_addr, envp_addr)) {
+    perror("mdbg_setlong");
+    pt_munmap(pid, envp_addr, size);
+    return -1;
+  }
+
+  return 0;
 }
 
 
@@ -664,11 +711,17 @@ elfldr_readfile(const char* path) {
 pid_t
 elfldr_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
   uint8_t int3instr = 0xcc;
+  char buf[PATH_MAX];
   intptr_t brkpoint;
   uint8_t orginstr;
   pid_t pid = -1;
   uint8_t* elf;
-  
+  char* cwd;
+
+  if(!(cwd=getenv("PWD"))) {
+    cwd = getcwd(buf, sizeof(buf));
+  }
+
   if(sceKernelSpawn(&pid, 1, SceSpZeroConf, 0, argv)) {
     perror("sceKernelSpawn");
     return -1;
@@ -734,7 +787,8 @@ elfldr_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
 
   // Execute the ELF
   elfldr_set_procname(pid, argv[0]);
-
+  elfldr_set_environ(pid, environ);
+  elfldr_set_cwd(pid, cwd);
 
   if(!(elf=elfldr_readfile(argv[0]))) {
     kill(pid, SIGKILL);
