@@ -24,6 +24,7 @@ along with this program; see the file COPYING. If not, see
 #include <sys/sysctl.h>
 
 #include <ps5/kernel.h>
+#include <ps5/klog.h>
 
 #include "gdb_serve.h"
 
@@ -77,7 +78,9 @@ int main(int argc, char** argv, char** envp) {
   pid_t pid;
 
   syscall(SYS_thr_set_name, -1, "gdbsrv.elf");
+
   printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
+  klog_printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
 
   while((pid=find_pid("gdbsrv.elf")) > 0) {
     if(kill(pid, SIGKILL)) {
