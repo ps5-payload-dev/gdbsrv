@@ -113,14 +113,21 @@ gdb_response_stdio(gdb_session_t* sess) {
   struct pollfd fds[2];
   char buf[0x100];
   ssize_t len;
+  int cnt = 1;
 
-  fds[0].fd = sess->stdio;
+  memset(fds, 0, sizeof(fds));
+
+  fds[0].fd = sess->fd;
   fds[0].events = POLLIN;
 
-  fds[1].fd = sess->fd;
+  fds[1].fd = sess->stdio;
   fds[1].events = POLLIN;
 
-  switch(poll(fds, 2, 1)) {
+  if(fds[1].fd > 0) {
+    cnt++;
+  }
+
+  switch(poll(fds, cnt, 1)) {
   case -1:
     if(gdb_pkt_notify_perror(sess->fd, "poll")) {
       perror("gdb_pkt_notify_perror");
@@ -131,7 +138,7 @@ gdb_response_stdio(gdb_session_t* sess) {
     return 0;
 
   default:
-    if(fds[1].revents & POLLIN) {
+    if(fds[0].revents & POLLIN) {
       if((len=read(sess->fd, buf, 1)) < 0) {
 	perror("read");
 	return SIGSTOP;
@@ -142,7 +149,7 @@ gdb_response_stdio(gdb_session_t* sess) {
       }
     }
 
-    if(fds[0].revents & POLLIN) {
+    if(fds[1].revents & POLLIN) {
       if((len=read(sess->stdio, buf, sizeof(buf))) < 0) {
 	if(gdb_pkt_notify_perror(sess->fd, "read")) {
 	  perror("gdb_pkt_notify_perror");
@@ -803,6 +810,7 @@ gdb_response_attach(gdb_session_t* sess, const char* data, size_t size) {
   }
 
   sess->pid = pid;
+  sess->stdio = -1;
 
   if(gdb_waitpid(sess, buf, sizeof(buf))) {
     return gdb_pkt_perror(sess->fd, "gdb_waitpid");
