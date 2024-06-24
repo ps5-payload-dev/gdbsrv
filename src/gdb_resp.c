@@ -138,7 +138,7 @@ gdb_response_stdio(gdb_session_t* sess) {
       }
 
       if(buf[0] == 3) {
-	return SIGINT;
+	return SIGSTOP;
       }
     }
 
@@ -152,7 +152,7 @@ gdb_response_stdio(gdb_session_t* sess) {
 
       if(gdb_pkt_notify(sess->fd, buf, len) < 0) {
 	if(errno == EINTR) {
-	  return SIGINT;
+	  return SIGSTOP;
 	}
 
 	perror("gdb_pkt_notify");
