@@ -175,16 +175,14 @@ gdb_waitpid(gdb_session_t* sess, char* data, size_t size) {
   int res;
 
   while(1) {
-    if((res=gdb_response_stdio(sess))) {
-      kill(sess->pid, res);
-    }
-
-    if((res=waitpid(sess->pid, &status, WNOHANG)) < 0) {
+    if((res=waitpid(sess->pid, &status, WNOHANG | WUNTRACED)) < 0) {
       return -1;
     }
 
     if(!res) {
-      usleep(1);
+      if((res=gdb_response_stdio(sess))) {
+	kill(sess->pid, res);
+      }
       continue;
     }
 
@@ -775,6 +773,43 @@ gdb_response_step(gdb_session_t* sess, const char* data, size_t size) {
 
 
 /**
+ * Input pattern: 'vAttach;pid'
+ *
+ * Attach to a new process with the specified process ID pid. The process ID
+ * is a hexadecimal integer identifying the process. In all-stop mode, all
+ * threads in the attached process are stopped; in non-stop mode, it may be
+ * attached without being stopped if that is supported by the target.
+ *
+ * This packet is only available in extended mode (see extended mode).
+ *
+ * Reply:
+ *   'Any stop packet' - for success in all-stop mode (see Stop Reply Packets)
+ *   ‘OK’ - for success in non-stop mode (see Remote Non-Stop) 
+ **/
+static int
+gdb_response_attach(gdb_session_t* sess, const char* data, size_t size) {
+  char buf[32];
+  pid_t pid;
+
+  if(sscanf(data, "vAttach;%x", &pid) != 1) {
+    return -1;
+  }
+
+  if(gdb_attach(pid)) {
+    return gdb_pkt_perror(sess->fd, "gdb_attach");
+  }
+
+  sess->pid = pid;
+
+  if(gdb_waitpid(sess, buf, sizeof(buf))) {
+    return gdb_pkt_perror(sess->fd, "gdb_waitpid");
+  }
+
+  return gdb_pkt_puts(sess->fd, buf);
+}
+
+
+/**
  * Input pattern: 'vFile:setfs:pid'
  *
  * Select the filesystem on which vFile operations with filename arguments will
@@ -1009,6 +1044,9 @@ gdb_response(void* ctx, const char* data, size_t size) {
     return gdb_response_step(sess, data, size);
 
   case 'v':
+    if(STR_START_WITH(data, "vAttach")) {
+      return gdb_response_attach(sess, data, size);
+    }
     if(STR_START_WITH(data, "vFile:setfs")) {
       return gdb_response_setfs(sess, data, size);
     }
@@ -1039,6 +1077,7 @@ gdb_response_session(int fd) {
     .fd = fd,
     .pid = -1,
     .sig = 0,
+    .stdio = -1,
     .baseaddr = 0
   };
 

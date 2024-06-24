@@ -91,10 +91,6 @@ pt_attach(pid_t pid) {
     return -1;
   }
 
-  if(waitpid(pid, 0, 0) == -1) {
-    return -1;
-  }
-
   return 0;
 }
 
