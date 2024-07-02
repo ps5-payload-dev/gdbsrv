@@ -10,7 +10,7 @@ then load the payload by issuing the following commands:
 
 ```console
 john@localhost:~$ export PS5_HOST=ps5
-john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/gdbsrv/releases/download/v0.2/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
+john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/gdbsrv/releases/download/v0.3/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
 ```
 
 Next, launch a new terminal and debug you payload by running the following set of
