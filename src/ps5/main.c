@@ -29,6 +29,15 @@ along with this program; see the file COPYING. If not, see
 #include "gdb_serve.h"
 
 
+typedef struct notify_request {
+  char useless1[45];
+  char message[3075];
+} notify_request_t;
+
+
+int sceKernelSendNotificationRequest(int, notify_request_t*, size_t, int);
+
+
 /**
  * Fint the pid of a process with the given name.
  **/
@@ -74,6 +83,7 @@ find_pid(const char* name) {
 
 
 int main(int argc, char** argv, char** envp) {
+  notify_request_t req;
   uint16_t port = 2159;
   pid_t pid;
 
@@ -89,6 +99,10 @@ int main(int argc, char** argv, char** envp) {
     }
     sleep(1);
   }
+
+  bzero(&req, sizeof req);
+  strncpy(req.message, "Serving GDB on port 2159", sizeof req.message);
+  sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 
   while(1) {
     gdb_serve(port);
