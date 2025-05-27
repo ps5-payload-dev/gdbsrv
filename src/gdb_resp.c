@@ -583,7 +583,7 @@ gdb_response_getreg(gdb_session_t* sess, const char* data, size_t size) {
   if(reg <= GDB_GPR_RIP) {
     return gdb_pkt_printf(sess->fd, "%016lx", __builtin_bswap64(val));
   } else {
-    return gdb_pkt_printf(sess->fd, "%04lx", __builtin_bswap32(val));
+    return gdb_pkt_printf(sess->fd, "%08lx", __builtin_bswap32(val));
   }
 }
 
