@@ -19,10 +19,10 @@ along with this program; see the file COPYING. If not, see
 #include <sys/wait.h>
 
 #include <ps5/kernel.h>
-#include <ps5/mdbg.h>
 
 #include "gdb_arch.h"
 #include "elfldr.h"
+#include "pt.h"
 
 
 static int
@@ -223,13 +223,13 @@ gdb_getreg(pid_t pid, enum gdb_gpr reg, uint64_t* val) {
 
 int
 gdb_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
-  return mdbg_copyin(pid, buf, addr, len);
+  return pt_copyin(pid, buf, addr, len);
 }
 
 
 int
 gdb_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
-  return mdbg_copyout(pid, addr, buf, len);
+  return pt_copyout(pid, addr, buf, len);
 }
 
 

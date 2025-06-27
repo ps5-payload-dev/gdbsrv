@@ -54,7 +54,7 @@ sys_ptrace(int request, pid_t pid, caddr_t addr, int data) {
     return -1;
   }
 
-  ret = (int)syscall(SYS_ptrace, request, pid, addr, data);
+  ret = (int)__syscall(SYS_ptrace, request, pid, addr, data);
 
   if(kernel_set_ucred_authid(mypid, authid)) {
     return -1;
@@ -87,7 +87,7 @@ pt_trace_me(void) {
 
 int
 pt_attach(pid_t pid) {
-  if(sys_ptrace(PT_ATTACH, pid, 0, 0) == -1) {
+  if(sys_ptrace(PT_ATTACH, pid, 0, 0)) {
     return -1;
   }
 
@@ -97,7 +97,7 @@ pt_attach(pid_t pid) {
 
 int
 pt_detach(pid_t pid) {
-  if(sys_ptrace(PT_DETACH, pid, 0, 0) == -1) {
+  if(sys_ptrace(PT_DETACH, pid, 0, 0)) {
     return -1;
   }
 
@@ -121,17 +121,11 @@ pt_step(int pid) {
 
 int
 pt_continue(pid_t pid, int sig) {
-  if(sys_ptrace(PT_CONTINUE, pid, (caddr_t)1, sig) == -1) {
+  if(sys_ptrace(PT_CONTINUE, pid, (caddr_t)1, sig)) {
     return -1;
   }
 
   return 0;
-}
-
-
-int
-pt_getint(pid_t pid, intptr_t addr) {
-  return sys_ptrace(PT_READ_D, pid, (caddr_t)addr, 0);
 }
 
 
@@ -144,6 +138,107 @@ pt_getregs(pid_t pid, struct reg *r) {
 int
 pt_setregs(pid_t pid, const struct reg *r) {
   return sys_ptrace(PT_SETREGS, pid, (caddr_t)r, 0);
+}
+
+
+int
+pt_copyout(pid_t pid, intptr_t addr, void* buf, size_t len) {
+  int prot = kernel_get_vmem_protection(pid, addr, len);
+  struct ptrace_io_desc iod = {
+    .piod_op = PIOD_READ_D,
+    .piod_offs = (void*)addr,
+    .piod_addr = buf,
+    .piod_len = len};
+  int ret;
+
+  kernel_set_vmem_protection(pid, addr, len, prot | PROT_READ);
+  ret = sys_ptrace(PT_IO, pid, (caddr_t)&iod, 0);
+  kernel_set_vmem_protection(pid, addr, len, prot);
+
+  return ret;
+}
+
+
+int
+pt_copyin(pid_t pid, const void* buf, intptr_t addr, size_t len) {
+  int prot = kernel_get_vmem_protection(pid, addr, len);
+  struct ptrace_io_desc iod = {
+    .piod_op = PIOD_WRITE_D,
+    .piod_offs = (void*)addr,
+    .piod_addr = (void*)buf,
+    .piod_len = len};
+  int ret;
+
+  kernel_set_vmem_protection(pid, addr, len, prot | PROT_READ | PROT_WRITE);
+  ret = sys_ptrace(PT_IO, pid, (caddr_t)&iod, 0);
+  kernel_set_vmem_protection(pid, addr, len, prot);
+
+  return ret;
+}
+
+
+int
+pt_setchar(pid_t pid, intptr_t addr, char val) {
+  return pt_copyin(pid, &val, addr, sizeof(val));
+}
+
+
+int
+pt_setshort(pid_t pid, intptr_t addr, short val) {
+  return pt_copyin(pid, &val, addr, sizeof(val));
+}
+
+
+int
+pt_setint(pid_t pid, intptr_t addr, int val) {
+  return pt_copyin(pid, &val, addr, sizeof(val));
+}
+
+
+int
+pt_setlong(pid_t pid, intptr_t addr, long val) {
+  return pt_copyin(pid, &val, addr, sizeof(val));
+}
+
+
+
+char
+pt_getchar(pid_t pid, intptr_t addr) {
+  char val = 0;
+
+  pt_copyout(pid, addr, &val, sizeof(val));
+
+  return val;
+}
+
+
+short
+pt_getshort(pid_t pid, intptr_t addr) {
+  short val = 0;
+
+  pt_copyout(pid, addr, &val, sizeof(val));
+
+  return val;
+}
+
+
+int
+pt_getint(pid_t pid, intptr_t addr) {
+  int val = 0;
+
+  pt_copyout(pid, addr, &val, sizeof(val));
+
+  return val;
+}
+
+
+long
+pt_getlong(pid_t pid, intptr_t addr) {
+  long val = 0;
+
+  pt_copyout(pid, addr, &val, sizeof(val));
+
+  return val;
 }
 
 

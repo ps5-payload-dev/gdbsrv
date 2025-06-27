@@ -35,7 +35,6 @@ along with this program; see the file COPYING. If not, see
 
 #include <ps5/kernel.h>
 #include <ps5/klog.h>
-#include <ps5/mdbg.h>
 
 #include "elfldr.h"
 #include "pt.h"
@@ -209,8 +208,8 @@ elfldr_load(elfldr_ctx_t* ctx) {
     }
   }
 
-  if(mdbg_copyin(ctx->pid, ctx->base_mirror, ctx->base_addr, ctx->base_size)) {
-    perror("mdbg_copyin");
+  if(pt_copyin(ctx->pid, ctx->base_mirror, ctx->base_addr, ctx->base_size)) {
+    perror("pt_copyin");
     error = 1;
   }
 
@@ -274,12 +273,12 @@ elfldr_payload_args(pid_t pid) {
     return 0;
   }
 
-  mdbg_setint(pid, buf+0x00, 20);
-  mdbg_setint(pid, buf+0x04, IPPROTO_IPV6);
-  mdbg_setint(pid, buf+0x08, IPV6_TCLASS);
-  mdbg_setint(pid, buf+0x0c, 0);
-  mdbg_setint(pid, buf+0x10, 0);
-  mdbg_setint(pid, buf+0x14, 0);
+  pt_setint(pid, buf+0x00, 20);
+  pt_setint(pid, buf+0x04, IPPROTO_IPV6);
+  pt_setint(pid, buf+0x08, IPV6_TCLASS);
+  pt_setint(pid, buf+0x0c, 0);
+  pt_setint(pid, buf+0x10, 0);
+  pt_setint(pid, buf+0x14, 0);
   if(pt_setsockopt(pid, master_sock, IPPROTO_IPV6, IPV6_2292PKTOPTIONS, buf, 24)) {
     pt_perror(pid, "pt_setsockopt");
     return 0;
@@ -290,11 +289,11 @@ elfldr_payload_args(pid_t pid) {
     return 0;
   }
 
-  mdbg_setint(pid, buf+0x00, 0);
-  mdbg_setint(pid, buf+0x04, 0);
-  mdbg_setint(pid, buf+0x08, 0);
-  mdbg_setint(pid, buf+0x0c, 0);
-  mdbg_setint(pid, buf+0x10, 0);
+  pt_setint(pid, buf+0x00, 0);
+  pt_setint(pid, buf+0x04, 0);
+  pt_setint(pid, buf+0x08, 0);
+  pt_setint(pid, buf+0x0c, 0);
+  pt_setint(pid, buf+0x10, 0);
   if(pt_setsockopt(pid, victim_sock, IPPROTO_IPV6, IPV6_PKTINFO, buf, 20)) {
     pt_perror(pid, "pt_setsockopt");
     return 0;
@@ -321,21 +320,21 @@ elfldr_payload_args(pid_t pid) {
   // sys_dynlib_dlsym is invoked at <sceKernelDlsym+4>: e8 xx xx xx xx ; call rel32
   intptr_t dlsym = pt_resolve(pid, "LwG8g3niqwA") + 4;
   int32_t  rel32 = 0;
-  mdbg_copyout(pid, dlsym+1, &rel32, sizeof(rel32));
+  pt_copyout(pid, dlsym+1, &rel32, sizeof(rel32));
   dlsym += rel32;
   dlsym += 5; // length of the call instruction
 
-  mdbg_setlong(pid, args + 0x00, dlsym);
-  mdbg_setlong(pid, args + 0x08, rwpipe);
-  mdbg_setlong(pid, args + 0x10, rwpair);
-  mdbg_setlong(pid, args + 0x18, kpipe_addr);
-  mdbg_setlong(pid, args + 0x20, KERNEL_ADDRESS_DATA_BASE);
-  mdbg_setlong(pid, args + 0x28, payloadout);
-  mdbg_setint(pid, rwpipe + 0, pipe0);
-  mdbg_setint(pid, rwpipe + 4, pipe1);
-  mdbg_setint(pid, rwpair + 0, master_sock);
-  mdbg_setint(pid, rwpair + 4, victim_sock);
-  mdbg_setint(pid, payloadout, 0);
+  pt_setlong(pid, args + 0x00, dlsym);
+  pt_setlong(pid, args + 0x08, rwpipe);
+  pt_setlong(pid, args + 0x10, rwpair);
+  pt_setlong(pid, args + 0x18, kpipe_addr);
+  pt_setlong(pid, args + 0x20, KERNEL_ADDRESS_DATA_BASE);
+  pt_setlong(pid, args + 0x28, payloadout);
+  pt_setint(pid, rwpipe + 0, pipe0);
+  pt_setint(pid, rwpipe + 4, pipe1);
+  pt_setint(pid, rwpair + 0, master_sock);
+  pt_setint(pid, rwpair + 4, victim_sock);
+  pt_setint(pid, payloadout, 0);
 
   return args;
 }
@@ -366,8 +365,8 @@ elfldr_prepare_exec(elfldr_ctx_t *ctx) {
     return -1;
   }
 
-  if(mdbg_copyin(ctx->pid, call_rax, r.r_rip, sizeof(call_rax))) {
-    perror("mdbg_copyin");
+  if(pt_copyin(ctx->pid, call_rax, r.r_rip, sizeof(call_rax))) {
+    perror("pt_copyin");
     return -1;
   }
 
@@ -405,7 +404,7 @@ elfldr_set_cwd(pid_t pid, const char* cwd) {
     return -1;
   }
 
-  mdbg_copyin(pid, cwd, buf, strlen(cwd)+1);
+  pt_copyin(pid, cwd, buf, strlen(cwd)+1);
   pt_syscall(pid, SYS_chdir, -1, buf);
   pt_msync(pid, buf, PAGE_SIZE, MS_SYNC);
   pt_munmap(pid, buf, PAGE_SIZE);
@@ -427,7 +426,7 @@ elfldr_set_procname(pid_t pid, const char* name) {
     return -1;
   }
 
-  mdbg_copyin(pid, name, buf, strlen(name)+1);
+  pt_copyin(pid, name, buf, strlen(name)+1);
   pt_syscall(pid, SYS_thr_set_name, -1, buf);
   pt_msync(pid, buf, PAGE_SIZE, MS_SYNC);
   pt_munmap(pid, buf, PAGE_SIZE);
@@ -524,15 +523,15 @@ elfldr_set_environ(pid_t pid, char** envp) {
     size_t len = strlen(envp[i]) + 1;
 
     // copy string
-    if(mdbg_copyin(pid, envp[i], pos, len)) {
-      perror("mdbg_copyin");
+    if(pt_copyin(pid, envp[i], pos, len)) {
+      perror("pt_copyin");
       pt_munmap(pid, envp_addr, size);
       return -1;
     }
 
     // copy pointer to string 
-    if(mdbg_setlong(pid, envp_addr + (i*8), pos)) {
-      perror("mdbg_setlong");
+    if(pt_setlong(pid, envp_addr + (i*8), pos)) {
+      perror("pt_setlong");
       pt_munmap(pid, envp_addr, size);
       return -1;
     }
@@ -540,8 +539,8 @@ elfldr_set_environ(pid_t pid, char** envp) {
   }
 
   // null-terminate envp_addr
-  if(mdbg_setlong(pid, envp_addr + (n*8), 0)) {
-      perror("mdbg_setlong");
+  if(pt_setlong(pid, envp_addr + (n*8), 0)) {
+      perror("pt_setlong");
       pt_munmap(pid, envp_addr, size);
       return -1;
   }
@@ -553,8 +552,8 @@ elfldr_set_environ(pid_t pid, char** envp) {
     return -1;
   }
 
-  if(mdbg_setlong(pid, environ_addr, envp_addr)) {
-    perror("mdbg_setlong");
+  if(pt_setlong(pid, environ_addr, envp_addr)) {
+    perror("pt_setlong");
     pt_munmap(pid, envp_addr, size);
     return -1;
   }
@@ -578,20 +577,20 @@ elfldr_set_heap_size(pid_t pid, ssize_t size) {
     return -1;
   }
 
-  if(mdbg_copyout(pid, sceProcParam+56, &sceLibcParam,
-		  sizeof(sceLibcParam))) {
-    perror("mdbg_copyout");
+  if(pt_copyout(pid, sceProcParam+56, &sceLibcParam,
+		sizeof(sceLibcParam))) {
+    perror("pt_copyout");
     return -1;
   }
 
-  if(mdbg_copyout(pid, sceLibcParam+16, &sceLibcHeapSize,
-		  sizeof(sceLibcHeapSize))) {
-    perror("mdbg_copyout");
+  if(pt_copyout(pid, sceLibcParam+16, &sceLibcHeapSize,
+		sizeof(sceLibcHeapSize))) {
+    perror("pt_copyout");
     return -1;
   }
 
-  if(mdbg_setlong(pid, sceLibcHeapSize, size)) {
-    perror("mdbg_setlong");
+  if(pt_setlong(pid, sceLibcHeapSize, size)) {
+    perror("pt_setlong");
     return -1;
   }
 
@@ -599,13 +598,13 @@ elfldr_set_heap_size(pid_t pid, ssize_t size) {
     return 0;
   }
 
-  if(mdbg_copyout(pid, sceLibcParam+72, &Need_sceLibc,
-		  sizeof(Need_sceLibc))) {
-    perror("mdbg_copyout");
+  if(pt_copyout(pid, sceLibcParam+72, &Need_sceLibc,
+		sizeof(Need_sceLibc))) {
+    perror("pt_copyout");
     return -1;
   }
 
-  return mdbg_setlong(pid, sceLibcParam+32, Need_sceLibc);
+  return pt_setlong(pid, sceLibcParam+32, Need_sceLibc);
 }
 
 
@@ -758,7 +757,7 @@ elfldr_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
   // at the libkernel entry. Let the kernel assign process parameters accessed
   // via sceKernelGetProcParam()
   if(pt_syscall(pid, 599)) {
-    puts("sys_dynlib_process_needed_and_relocate failed");
+    pt_perror(pid, "sys_dynlib_process_needed_and_relocate");
     kill(pid, SIGKILL);
     pt_detach(pid);
     return -1;
@@ -775,14 +774,14 @@ elfldr_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
     return -1;
   }
   brkpoint += 58;// offset to invocation of main()
-  if(mdbg_copyout(pid, brkpoint, &orginstr, sizeof(orginstr))) {
-    perror("mdbg_copyout");
+  if(pt_copyout(pid, brkpoint, &orginstr, sizeof(orginstr))) {
+    perror("pt_copyout");
     kill(pid, SIGKILL);
     pt_detach(pid);
     return -1;
   }
-  if(mdbg_copyin(pid, &int3instr, brkpoint, sizeof(int3instr))) {
-    perror("mdbg_copyin");
+  if(pt_copyin(pid, &int3instr, brkpoint, sizeof(int3instr))) {
+    perror("pt_copyin");
     kill(pid, SIGKILL);
     pt_detach(pid);
     return -1;
@@ -801,8 +800,8 @@ elfldr_spawn(char* argv[], int stdio, intptr_t* baseaddr) {
     pt_detach(pid);
     return -1;
   }
-  if(mdbg_copyin(pid, &orginstr, brkpoint, sizeof(orginstr))) {
-    perror("mdbg_copyin");
+  if(pt_copyin(pid, &orginstr, brkpoint, sizeof(orginstr))) {
+    perror("pt_copyin");
     kill(pid, SIGKILL);
     pt_detach(pid);
     return -1;
