@@ -48,7 +48,7 @@ sys_ptrace(int request, pid_t pid, caddr_t addr, int data) {
     return -1;
   }
 
-  ret = (int)syscall(SYS_ptrace, request, pid, addr, data);
+  ret = (int)__syscall(SYS_ptrace, request, pid, addr, data);
 
   if(kernel_set_ucred_authid(mypid, authid)) {
     return -1;
@@ -69,7 +69,7 @@ gdb_traceme(void) {
 
 int
 gdb_attach(pid_t pid) {
-  if(sys_ptrace(PT_ATTACH, pid, 0, 0) == -1) {
+  if(sys_ptrace(PT_ATTACH, pid, 0, 0)) {
     return -1;
   }
 
@@ -79,7 +79,7 @@ gdb_attach(pid_t pid) {
 
 int
 gdb_detach(pid_t pid) {
-  if(sys_ptrace(PT_DETACH, pid, 0, 0) == -1) {
+  if(sys_ptrace(PT_DETACH, pid, 0, 0)) {
     return -1;
   }
 
@@ -107,7 +107,7 @@ gdb_continue(pid_t pid, intptr_t addr, int sig) {
     addr = 1;
   }
 
-  if(sys_ptrace(PT_CONTINUE, pid, (caddr_t)addr, sig) == -1) {
+  if(sys_ptrace(PT_CONTINUE, pid, (caddr_t)addr, sig)) {
     return -1;
   }
 
@@ -119,7 +119,7 @@ int
 gdb_getregs(pid_t pid, uint64_t gprmap[GDB_GPR_MAX]) {
   struct reg r;
 
-  if(sys_ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
+  if(sys_ptrace(PT_GETREGS, pid, (caddr_t)&r, 0)) {
     return -1;
   }
 
@@ -156,7 +156,7 @@ int
 gdb_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   struct reg r;
 
-  if(sys_ptrace(PT_GETREGS, pid, (caddr_t)&r, 0) == -1) {
+  if(sys_ptrace(PT_GETREGS, pid, (caddr_t)&r, 0)) {
     return -1;
   }
 
@@ -185,7 +185,7 @@ gdb_setregs(pid_t pid, const uint64_t gprmap[GDB_GPR_MAX]) {
   r.r_fs = gprmap[GDB_GPR_FS];
   r.r_gs = gprmap[GDB_GPR_GS];
 
-  if(sys_ptrace(PT_SETREGS, pid, (caddr_t)&r, 0) == -1) {
+  if(sys_ptrace(PT_SETREGS, pid, (caddr_t)&r, 0)) {
     return -1;
   }
 
