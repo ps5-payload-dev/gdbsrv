@@ -212,7 +212,7 @@ gdb_pkt_notify_perror(int fd, const char *s) {
 
 int
 gdb_pkt_get(int fd, gdb_pkt_cb_t* cb, void* ctx) {
-  char buf[GDB_PKT_MAX_SIZE];
+  char buf[GDB_PKT_MAX_SIZE+0x20];
   uint8_t checksum = 0;
   uint8_t xmitcsum = 0;
   off_t offset = 0;
