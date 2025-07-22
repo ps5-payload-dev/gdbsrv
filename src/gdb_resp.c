@@ -537,25 +537,36 @@ gdb_response_getmem(gdb_session_t* sess, const char* data, size_t size) {
  **/
 static int
 gdb_response_setmem(gdb_session_t* sess, const char* data, size_t size) {
-  char buf[GDB_PKT_MAX_SIZE / 2];
   intptr_t addr;
   size_t len;
+  char* buf;
+  int r;
 
   if(sscanf(data, "M%lx,%lx:", &addr, &len) != 2) {
     return gdb_pkt_printf(sess->fd, "E00");
   }
-
   if(!(data=strstr(data, ":"))) {
     return -1;
   }
-  if(gdb_hex2bin(data+1, buf, sizeof(buf))) {
+
+  if(!(buf=malloc(len))) {
     return -1;
   }
-  if(gdb_copyin(sess->pid, buf, addr, len)) {
-    return gdb_pkt_printf(sess->fd, "E%02X", errno);
+  if(gdb_hex2bin(data+1, buf, len)) {
+    free(buf);
+    return -1;
   }
 
-  return gdb_pkt_puts(sess->fd, "OK");}
+  if(gdb_copyin(sess->pid, buf, addr, len)) {
+    r = gdb_pkt_printf(sess->fd, "E%02X", errno);
+  } else {
+    r = gdb_pkt_puts(sess->fd, "OK");
+  }
+
+  free(buf);
+
+  return r;
+}
 
 
 /**
