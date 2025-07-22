@@ -850,8 +850,8 @@ gdb_response_setfs(gdb_session_t* sess, const char* data, size_t size) {
  **/
 static int
 gdb_response_fsopen(gdb_session_t* sess, const char* data, size_t size) {
-  char buf[GDB_PKT_MAX_SIZE];
   char filename[PATH_MAX];
+  char buf[PATH_MAX*2];
   char *tok;
   int flags;
   int mode;
