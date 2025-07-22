@@ -702,9 +702,9 @@ gdb_response_offsets(gdb_session_t* sess, const char* data, size_t size) {
  **/
 static int
 gdb_response_supported(gdb_session_t* sess, const char* data, size_t size) {
-  char s[GDB_PKT_MAX_SIZE];
+  char s[0x100];
 
-  sprintf(s, "PacketSize=%x", GDB_PKT_MAX_SIZE-0x100);
+  sprintf(s, "PacketSize=%x", GDB_PKT_MAX_SIZE);
   strcat(s, ";qXfer:features:read+");
 
   return gdb_pkt_puts(sess->fd, s);
