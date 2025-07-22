@@ -369,8 +369,8 @@ gdb_response_detach(gdb_session_t* sess, const char* data, size_t size) {
 static int
 gdb_response_getregs(gdb_session_t* sess, const char* data, size_t size) {
   uint64_t gprmap[GDB_GPR_MAX];
-  char buf[GDB_PKT_MAX_SIZE];
-  char hex[17];
+  char buf[(GDB_GPR_MAX*16)+1];
+  char hex[16+1];
 
   if(gdb_getregs(sess->pid, gprmap)) {
     return gdb_pkt_perror(sess->fd, "gdb_getregs");
