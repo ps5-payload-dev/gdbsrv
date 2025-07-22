@@ -19,6 +19,7 @@ along with this program; see the file COPYING. If not, see
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -159,14 +160,24 @@ gdb_pkt_put(int fd, const char* data, size_t size) {
 
 int
 gdb_pkt_notify(int fd, const char* data, size_t size) {
-  char buf[1+(size*2)];
+  size_t buf_len = 1 + (2*size);
+  char *buf;
+  int r;
 
-  buf[0] = 'O';
-  for(int i=0; i<size; i++) {
-    sprintf(buf+1+(i*2), "%02x", data[i]);
+  if(!(buf=malloc(buf_len+1))) {
+    return -1;
   }
 
-  return gdb_pkt_put(fd, buf, sizeof(buf));
+  buf[0] = 'O';
+  for(size_t i=0; i<size; i++) {
+    sprintf(buf + 1 + (2*i), "%02x", (uint8_t)data[i]);
+  }
+  buf[buf_len] = 0;
+
+  r = gdb_pkt_put(fd, buf, buf_len);
+  free(buf);
+
+  return r;
 }
 
 
@@ -178,19 +189,21 @@ gdb_pkt_puts(int fd, const char* str) {
 
 int
 gdb_pkt_printf(int fd, const char *fmt, ...) {
-  char s[GDB_PKT_MAX_SIZE];
   va_list args;
-  int res;
+  char* s;
+  int r;
 
   va_start(args, fmt);
-  res = vsnprintf(s, sizeof(s), fmt, args);
+  r = vasprintf(&s, fmt, args);
   va_end(args);
 
-  if(res == sizeof(s)) {
+  if(r < 0) {
     return -1;
   }
+  r = gdb_pkt_puts(fd, s);
+  free(s);
 
-  return gdb_pkt_puts(fd, s);
+  return r;
 }
 
 
@@ -202,9 +215,9 @@ gdb_pkt_perror(int fd, const char *str) {
 
 int
 gdb_pkt_notify_perror(int fd, const char *s) {
-  char buf[GDB_PKT_MAX_SIZE/2 - 1];
+  char buf[0x200];
 
-  sprintf(buf, "%s: %s", s, strerror(errno));
+  snprintf(buf, sizeof(buf), "%s: %s", s, strerror(errno));
 
   return gdb_pkt_notify(fd ,buf, strlen(buf));
 }
@@ -212,18 +225,26 @@ gdb_pkt_notify_perror(int fd, const char *s) {
 
 int
 gdb_pkt_get(int fd, gdb_pkt_cb_t* cb, void* ctx) {
-  char buf[GDB_PKT_MAX_SIZE+0x20];
   uint8_t checksum = 0;
   uint8_t xmitcsum = 0;
   off_t offset = 0;
+  size_t size = 0;
+  char *buf = 0;
   int ch = 0;
+  void* p;
+  int r;
 
   if(gdb_pkt_sync(fd)) {
     return -1;
   }
 
+  if(!(buf=malloc(0x4000))) {
+    return -1;
+  }
+
   while(1) {
     if((ch=gdb_getchar(fd)) == -1) {
+      free(buf);
       return -1;
     }
 
@@ -231,8 +252,12 @@ gdb_pkt_get(int fd, gdb_pkt_cb_t* cb, void* ctx) {
       break;
     }
 
-    if(offset >= sizeof(buf)-1) {
-      return -1;
+    if(offset >= size) {
+      if(!(p=realloc(buf, offset+0x4000))) {
+        free(buf);
+        return -1;
+      }
+      buf = p;
     }
 
     checksum += (uint8_t)ch;
@@ -241,17 +266,20 @@ gdb_pkt_get(int fd, gdb_pkt_cb_t* cb, void* ctx) {
   }
   buf[offset] = 0;
   if((ch=gdb_getchar(fd)) == -1) {
+    free(buf);
     return 0;
   }
   xmitcsum = gdb_hex(ch) << 4;
 
   if((ch=gdb_getchar(fd)) == -1) {
+    free(buf);
     return 0;
   }
   xmitcsum += gdb_hex(ch);
 
   if(checksum != xmitcsum) {
     gdb_putchar(fd, '-');
+    free(buf);
     return -1;
   }
 
@@ -260,6 +288,8 @@ gdb_pkt_get(int fd, gdb_pkt_cb_t* cb, void* ctx) {
 #endif
 
   gdb_putchar(fd, '+');
-  return cb(ctx, buf, offset);
+  r = cb(ctx, buf, offset);
+  free(buf);
+  return r;
 }
 

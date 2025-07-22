@@ -912,14 +912,18 @@ gdb_response_fsclose(gdb_session_t* sess, const char* data, size_t size) {
  **/
 static int
 gdb_response_fswrite(gdb_session_t* sess, const char* data, size_t size) {
-  char buf[GDB_PKT_MAX_SIZE];
   const char* tok;
   ssize_t len;
   off_t off = 0;
+  void* buf;
   int fd;
+  int r;
 
   if(sscanf(data, "vFile:pwrite:%x,%lx", &fd, &off) != 2) {
     return -1;
+  }
+  if(lseek(fd, off, SEEK_SET) == -1) {
+    return gdb_pkt_printf(sess->fd, "F-1,%x", errno);
   }
 
   if(!(tok=strstr(data, ","))) {
@@ -930,19 +934,25 @@ gdb_response_fswrite(gdb_session_t* sess, const char* data, size_t size) {
   }
 
   tok += 1;
-  len = size - (size_t)(tok - data);
+  if((len=(size-(size_t)(tok-data))) < 0) {
+    return -1;
+  }
+  if(!(buf=malloc(len))) {
+    return -1;
+  }
 
   memcpy(buf, tok, len);
   len = gdb_bin_unescape(buf, len);
 
-  if(lseek(fd, off, SEEK_SET) == -1) {
-    return gdb_pkt_printf(sess->fd, "F-1,%x", errno);
-  }
   if((len=write(fd, buf, len)) == -1) {
-    return gdb_pkt_printf(sess->fd, "F-1,%x", errno);
+    r = gdb_pkt_printf(sess->fd, "F-1,%x", errno);
+  } else {
+    r = gdb_pkt_printf(sess->fd, "F%x", len);
   }
 
-  return gdb_pkt_printf(sess->fd, "F%x", len);
+  free(buf);
+
+  return r;
 }
 
 
