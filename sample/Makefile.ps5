@@ -22,24 +22,25 @@ else
     $(error PS5_PAYLOAD_SDK is undefined)
 endif
 
-BIN  := payload-ps5.elf
+ELF  := payload-ps5.elf
 SRCS := payload.c
 
 CFLAGS := -Wall -Werror -g
 LDADD := 
 
-all: $(BIN)
+all: $(ELF)
 
 clean:
-	rm -rf $(BIN)
+	rm -rf $(ELF)
 
-$(BIN): $(SRCS)
-	$(CC) $(CFLAGS) $(LDADD) -o $@ $^
+$(ELF): $(SRCS)
+	$(CC) $(CFLAGS) -o $@ $^
 
-test: $(BIN)
-	gdb \
+test: $(ELF)
+	gdb-multiarch \
+	-ex "set architecture i386:x86-64" \
 	-ex "target extended-remote $(PS5_HOST):2159" \
-	-ex "file $(BIN)" \
-	-ex "remote put $(BIN) /data/$(BIN)" \
-	-ex "set remote exec-file /data/$(BIN)" \
+	-ex "file $(ELF)" \
+	-ex "remote put $(ELF) /user/temp/$(ELF)" \
+	-ex "set remote exec-file /user/temp/$(ELF)" \
 	-ex "start"
