@@ -23,9 +23,6 @@ along with this program; see the file COPYING. If not, see
 #include <sys/syscall.h>
 #include <sys/sysctl.h>
 
-#include <ps5/kernel.h>
-#include <ps5/klog.h>
-
 #include "gdb_serve.h"
 
 
@@ -82,15 +79,16 @@ find_pid(const char* name) {
 }
 
 
-int main(int argc, char** argv, char** envp) {
+int
+main(int argc, char** argv, char** envp) {
   notify_request_t req;
   uint16_t port = 2159;
   pid_t pid;
 
   syscall(SYS_thr_set_name, -1, "gdbsrv.elf");
+  syscall(SYS_setsid);
 
   printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
-  klog_printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
 
   while((pid=find_pid("gdbsrv.elf")) > 0) {
     if(kill(pid, SIGKILL)) {
@@ -104,6 +102,7 @@ int main(int argc, char** argv, char** envp) {
   strncpy(req.message, "Serving GDB on port 2159", sizeof req.message);
   sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 
+  chdir("/user/temp");
   while(1) {
     gdb_serve(port);
     sleep(3);

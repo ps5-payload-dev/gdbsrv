@@ -465,7 +465,11 @@ gdb_response_kill(gdb_session_t* sess, const char* data, size_t size) {
     return gdb_pkt_perror(sess->fd, "kill");
   }
 
-  return -1;
+  if(gdb_detach(sess->pid)) {
+    return gdb_pkt_perror(sess->fd, "gdb_detach");
+  }
+
+  return 0;
 }
 
 
