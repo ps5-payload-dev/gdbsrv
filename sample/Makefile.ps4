@@ -1,4 +1,4 @@
-#   Copyright (C) 2024 John Törnblom
+#   Copyright (C) 2025 John Törnblom
 #
 # This file is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -14,28 +14,33 @@
 # along with this program; see the file COPYING. If not see
 # <http://www.gnu.org/licenses/>.
 
-PS5_HOST ?= ps5
-PS5_PORT ?= 9021
+PS4_HOST ?= ps4
 
-ifdef PS5_PAYLOAD_SDK
-    include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
+ifdef PS4_PAYLOAD_SDK
+    include $(PS4_PAYLOAD_SDK)/toolchain/orbis.mk
 else
-    $(error PS5_PAYLOAD_SDK is undefined)
+    $(error PS4_PAYLOAD_SDK is undefined)
 endif
 
-BIN   := gdbsrv-ps5.elf
-SRCS := src/gdb_serve.c src/gdb_resp.c src/gdb_sig.c src/gdb_pkt.c
-SRCS += src/ps5/main.c src/ps5/gdb_arch.c src/ps5/pt.c src/ps5/elfldr.c
+ELF  := payload-ps4.elf
+SRCS := payload.c
 
-CFLAGS := -Isrc -Wall # -DGDB_PKT_TRACE
+CFLAGS := -Wall -Werror -g
+LDADD := 
 
-all: $(BIN)
+all: $(ELF)
 
 clean:
-	rm -rf $(BIN)
+	rm -rf $(ELF)
 
-$(BIN): $(SRCS)
-	$(CC) $(CFLAGS) -o $@ $^
+$(ELF): $(SRCS)
+	$(CC) $(CFLAGS) $(LDADD) -o $@ $^
 
-test: $(BIN)
-	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
+test: $(ELF)
+	gdb-multiarch \
+	-ex "set architecture i386:x86-64" \
+	-ex "target extended-remote $(PS4_HOST):2159" \
+	-ex "file $(ELF)" \
+	-ex "remote put $(ELF) /user/temp/$(ELF)" \
+	-ex "set remote exec-file /user/temp/$(ELF)" \
+	-ex "start"
