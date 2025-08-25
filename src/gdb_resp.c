@@ -801,9 +801,9 @@ gdb_response_cmd_ps(gdb_session_t* sess, int argc, char* argv[]) {
 }
 
 /**
- * Input pattern: 'monitor <command> [options]'
+ * Input pattern: 'monitor <cmd>'
  *
- * adds extended remote commands that offers handy functionality.
+ * adds extended remote cmds that offers handy functionality.
  **/
 static int
 gdb_response_cmd(gdb_session_t* sess, const char* data, size_t size) {
@@ -827,10 +827,9 @@ gdb_response_cmd(gdb_session_t* sess, const char* data, size_t size) {
     }
   }
 
-  char msg[] = 
-  "Usage: monitor <command> [options]\n\n"
+  char msg[] = "Usage: monitor <cmd>\n\n"
   "Commands:\n"
-  "\tps <filter>\tList processes with pids. with <filter> only list processes whose names contains it (case sensitive).\n";
+  "\tps <filter(case-sensitive)>\tList processes with pids.\n";
 
   gdb_pkt_notify(sess->fd, msg, strlen(msg));
   return gdb_pkt_puts(sess->fd, "OK");
