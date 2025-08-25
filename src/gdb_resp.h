@@ -18,6 +18,7 @@ along with this program; see the file COPYING. If not, see
 
 #include <unistd.h>
 
+#define GDB_CMD_MAX_ARGV_COUNT 15
 
 /**
  * Respond to requests from a gdb session.

@@ -25,6 +25,7 @@ along with this program; see the file COPYING. If not, see
 #include <poll.h>
 
 #include <sys/wait.h>
+#include <sys/sysctl.h>
 
 #include "gdb_arch.h"
 #include "gdb_pkt.h"
@@ -88,7 +89,7 @@ gdb_hex2bin(const char* str, void* bin, size_t size) {
   uint8_t* ptr = bin;
   int ch;
 
-  if(len > size*2 || len%2) {
+  if(!len || len > size*2 || len%2) {
     return -1;
   }
 
@@ -745,6 +746,95 @@ gdb_response_transfer(gdb_session_t* sess, const char* data, size_t size) {
   return gdb_pkt_printf(sess->fd, "");
 }
 
+static int
+gdb_response_cmd_ps(gdb_session_t* sess, int argc, char* argv[]) {
+  if (argc > 2) {
+    return gdb_pkt_puts(sess->fd, "");
+  }
+
+  int mib[4] = { 1, 14, 8, 0 };
+  size_t buf_size;
+  uint8_t* buf;
+  
+  char* name;
+  if (argc == 2) {
+    name = argv[1];
+  }
+
+  if (sysctl(mib, 4, 0, &buf_size, 0, 0)) {
+    return -1;
+  }
+
+  if (!(buf = malloc(buf_size))) {
+    return -1;
+  }
+
+  if (sysctl(mib, 4, buf, &buf_size, 0, 0)) {
+    free(buf);
+    return -1;
+  }
+
+  char msg[GDB_PKT_MAX_SIZE] = "pid\tname\n";
+  for (uint8_t* ptr = buf; ptr < (buf + buf_size);) {
+    int ki_structsize = *(int*)ptr;
+    pid_t ki_pid = *(pid_t*)&ptr[72];
+    char* ki_tdname = (char*)&ptr[447];
+
+    ptr += ki_structsize;
+
+    if (name && !strstr(ki_tdname, name)) {
+      continue;
+    }
+
+    size_t pos = strlen(msg);
+    size_t len = sizeof(msg) - pos;
+
+    if (len > 0) {
+      snprintf(msg + pos, len, "%d\t%s\n", ki_pid, ki_tdname);
+    }
+  }
+
+  free(buf);
+
+  gdb_pkt_notify(sess->fd, msg, strlen(msg));
+  return gdb_pkt_puts(sess->fd, "OK");
+}
+
+/**
+ * Input pattern: 'monitor <command> [options]'
+ *
+ * adds extended remote commands that offers handy functionality.
+ **/
+static int
+gdb_response_cmd(gdb_session_t* sess, const char* data, size_t size) {
+  char cmd[256];
+    
+  const char* hex = data + 6;
+
+  if (!gdb_hex2bin(hex, cmd, sizeof(cmd))) {
+    int argc = 0;
+    char* argv[GDB_CMD_MAX_ARGV_COUNT];
+    memset(argv, 0, sizeof(argv));
+
+    char* token = strtok(cmd, " ");
+    while (token != NULL && argc < GDB_CMD_MAX_ARGV_COUNT) {
+      argv[argc++] = token;
+      token = strtok(NULL, " ");
+    }
+
+    if (!strcmp(argv[0], "ps")) {
+      return gdb_response_cmd_ps(sess, argc, argv);
+    }
+  }
+
+  char msg[] = 
+  "Usage: monitor <command> [options]\n\n"
+  "Commands:\n"
+  "\tps <filter>\tList processes with pids. with <filter> only list processes whose names contains it (case sensitive).\n";
+
+  gdb_pkt_notify(sess->fd, msg, strlen(msg));
+  return gdb_pkt_puts(sess->fd, "OK");
+}
 
 /**
  * Input pattern: 's [addr]'
@@ -1072,6 +1162,9 @@ gdb_response(void* ctx, const char* data, size_t size) {
     }
     if(STR_START_WITH(data, "qXfer")) {
       return gdb_response_transfer(sess, data, size);
+    }
+    if(STR_START_WITH(data, "qRcmd")) {
+      return gdb_response_cmd(sess, data, size);
     }
     return gdb_pkt_puts(sess->fd, "");
 
