@@ -88,6 +88,16 @@ main(int argc, char** argv, char** envp) {
   syscall(SYS_thr_set_name, -1, "gdbsrv.elf");
   syscall(SYS_setsid);
 
+  puts(".-------------------------------------------------------------------.");
+  puts("|              _   _                                       _    __  |");
+  puts("|   __ _    __| | | |__    ___   _ __  __   __       ___  | |  / _| |");
+  puts("|  / _` |  / _` | | '_ \\  / __| | '__| \\ \\ / /      / _ \\ | | | |_  |");
+  puts("| | (_| | | (_| | | |_) | \\__ \\ | |     \\ V /   _  |  __/ | | |  _| |");
+  puts("|  \\__, |  \\__,_| |_.__/  |___/ |_|      \\_/   (_)  \\___| |_| |_|   |");
+  puts("|  |___/                                                            |");
+  printf("| %-32s Copyright (C) 2025 John Törnblom |\n", VERSION_TAG);
+  puts("'-------------------------------------------------------------------'");
+
   printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
 
   while((pid=find_pid("gdbsrv.elf")) > 0) {
