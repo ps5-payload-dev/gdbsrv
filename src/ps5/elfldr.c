@@ -345,7 +345,6 @@ elfldr_payload_args(pid_t pid) {
  **/
 static int
 elfldr_prepare_exec(elfldr_ctx_t *ctx) {
-  uint8_t call_rax[] = {0xff, 0xd0};
   intptr_t entry;
   intptr_t args;
   struct reg r;
@@ -365,12 +364,10 @@ elfldr_prepare_exec(elfldr_ctx_t *ctx) {
     return -1;
   }
 
-  if(pt_copyin(ctx->pid, call_rax, r.r_rip, sizeof(call_rax))) {
-    perror("pt_copyin");
-    return -1;
-  }
-
-  r.r_rax = entry;
+  r.r_rsp &= ~0xfl;
+  pt_setlong(ctx->pid, r.r_rsp-8, r.r_rip);
+  r.r_rsp -= 8;
+  r.r_rip = entry;
   r.r_rdi = args;
 
   if(pt_setregs(ctx->pid, &r)) {
