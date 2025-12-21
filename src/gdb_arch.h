@@ -55,7 +55,7 @@ enum gdb_gpr {
 int gdb_traceme(void);
 
 int gdb_attach(pid_t pid);
-int gdb_detach(pid_t pid);
+int gdb_detach(pid_t pid, int sig);
 
 int gdb_step(pid_t pid, intptr_t addr, int sig);
 int gdb_continue(pid_t pid, intptr_t addr, int sig);

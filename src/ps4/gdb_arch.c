@@ -40,8 +40,8 @@ gdb_attach(pid_t pid) {
 
 
 int
-gdb_detach(pid_t pid) {
-  if(ptrace(PT_DETACH, pid, 0, 0)) {
+gdb_detach(pid_t pid, int sig) {
+  if(ptrace(PT_DETACH, pid, 0, sig)) {
     return -1;
   }
 

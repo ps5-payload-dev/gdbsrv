@@ -324,7 +324,7 @@ gdb_response_detach(gdb_session_t* sess, const char* data, size_t size) {
     }
   }
 
-  if(gdb_detach(pid)) {
+  if(gdb_detach(pid, SIGCONT)) {
     return gdb_pkt_perror(sess->fd, "gdb_detach");
   }
 
@@ -461,11 +461,7 @@ gdb_response_kill(gdb_session_t* sess, const char* data, size_t size) {
     return gdb_pkt_puts(sess->fd, "");
   }
 
-  if(kill(sess->pid, SIGTERM)) {
-    return gdb_pkt_perror(sess->fd, "kill");
-  }
-
-  if(gdb_detach(sess->pid)) {
+  if(gdb_detach(sess->pid, SIGKILL)) {
     return gdb_pkt_perror(sess->fd, "gdb_detach");
   }
 
@@ -819,9 +815,6 @@ gdb_response_attach(gdb_session_t* sess, const char* data, size_t size) {
 
   if(gdb_attach(pid)) {
     return gdb_pkt_perror(sess->fd, "gdb_attach");
-  }
-  if(kill(pid, SIGSTOP)) {
-    return gdb_pkt_perror(sess->fd, "kill");
   }
 
   sess->pid = pid;
