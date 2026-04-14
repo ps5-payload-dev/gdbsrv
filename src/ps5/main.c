@@ -83,10 +83,33 @@ int
 main(int argc, char** argv, char** envp) {
   notify_request_t req;
   uint16_t port = 2159;
+  int notify_user = 1;
   pid_t pid;
+  char c;
 
   syscall(SYS_thr_set_name, -1, "gdbsrv.elf");
   syscall(SYS_setsid);
+
+  while((c=getopt(argc, argv, "p:qh")) != -1) {
+    switch(c) {
+    case 'p':
+      port = atoi(optarg);
+      break;
+
+    case 'q':
+      notify_user = 0;
+      break;
+
+    case 'h':
+    default:
+      printf("usage: %s [-p PORT] [-q]\n", argv[0]);
+      puts("");
+      printf("options:");
+      printf("    -p PORT    Bind the socket server to the given PORT (default: 2159)\n");
+      printf("    -q         Do not send an on-screen notification when the server starts\n");
+      return EXIT_FAILURE;
+    }
+  }
 
   puts(".-------------------------------------------------------------------.");
   puts("|              _   _                                       _    __  |");
@@ -108,9 +131,11 @@ main(int argc, char** argv, char** envp) {
     sleep(1);
   }
 
-  bzero(&req, sizeof req);
-  strncpy(req.message, "Serving GDB on port 2159", sizeof req.message);
-  sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
+  if(notify_user) {
+    bzero(&req, sizeof req);
+    snprintf(req.message, sizeof req.message, "Serving GDB on port %d", port);
+    sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
+  }
 
   chdir("/user/temp");
   while(1) {
